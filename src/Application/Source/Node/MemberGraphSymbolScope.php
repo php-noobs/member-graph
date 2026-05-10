@@ -76,6 +76,14 @@ final readonly class MemberGraphSymbolScope
     }
 
     /**
+     * Returns constant namespace declaration facts.
+     */
+    public function constantDeclarations(): MemberGraphSymbolScopeFactCollection
+    {
+        return $this->facts->byRole(MemberGraphSymbolScopeFactRole::CONSTANT_NAMESPACE_DECLARATION);
+    }
+
+    /**
      * Returns class-like import facts.
      */
     public function classLikeImports(): MemberGraphSymbolScopeFactCollection

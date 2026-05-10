@@ -15,7 +15,7 @@ use PhpNoobs\MemberGraph\Domain\Owner\KnownOwnerCollection;
  */
 final readonly class MemberGraphCachePayload
 {
-    public const int SCHEMA_VERSION = 8;
+    public const int SCHEMA_VERSION = 9;
 
     /**
      * Constructor.

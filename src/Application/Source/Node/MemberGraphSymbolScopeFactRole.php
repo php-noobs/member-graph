@@ -40,6 +40,11 @@ enum MemberGraphSymbolScopeFactRole
     case FUNCTION_NAMESPACE_DECLARATION;
 
     /**
+     * The fact is a constant declaration in a namespace scope.
+     */
+    case CONSTANT_NAMESPACE_DECLARATION;
+
+    /**
      * The fact is a class-like import in a file scope.
      */
     case CLASS_LIKE_IMPORT;

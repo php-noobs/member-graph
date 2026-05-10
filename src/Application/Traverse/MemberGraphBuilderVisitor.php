@@ -37,6 +37,7 @@ use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\Closure;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\MethodCall;
@@ -52,6 +53,7 @@ use PhpParser\Node\NullableType;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Const_ as ConstStatement;
 use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\EnumCase;
 use PhpParser\Node\Stmt\Expression;
@@ -192,6 +194,12 @@ final class MemberGraphBuilderVisitor extends NodeVisitorAbstract
             return null;
         }
 
+        if ($node instanceof ConstStatement) {
+            $this->memberDeclarationCollector->collectConstants($node, $this->state->currentNamespace());
+
+            return null;
+        }
+
         if ($node instanceof Closure || $node instanceof ArrowFunction) {
             $this->enterClosureLikeNode($node);
 
@@ -258,6 +266,12 @@ final class MemberGraphBuilderVisitor extends NodeVisitorAbstract
         if ($node instanceof ClassConstFetch && $node->class instanceof Name && $node->name instanceof Identifier) {
             $this->collectOwnerUsageFromName($node->class, OwnerUsageType::CLASS_CONSTANT_FETCH);
             $this->collectClassConstantFetchUsage($node);
+
+            return null;
+        }
+
+        if ($node instanceof ConstFetch) {
+            $this->collectConstantFetchUsage($node);
 
             return null;
         }
@@ -584,6 +598,64 @@ final class MemberGraphBuilderVisitor extends NodeVisitorAbstract
             $node->name->toString(),
             SourceNodeId::fromNode($this->state->virtualFilePath(), $node),
         );
+    }
+
+    /**
+     * Collects one global or namespaced constant fetch usage.
+     *
+     * @param ConstFetch $node the constant fetch node
+     */
+    private function collectConstantFetchUsage(ConstFetch $node): void
+    {
+        if ($this->isNativeConstantFetch($node)) {
+            return;
+        }
+
+        $this->memberUsageCollector->collectConstantFetch(
+            $this->state->sourceSymbol(),
+            $this->resolveConstantFetchName($node->name),
+            SourceNodeId::fromNode($this->state->virtualFilePath(), $node),
+        );
+    }
+
+    /**
+     * Indicates whether a constant fetch targets a native language constant.
+     *
+     * @param ConstFetch $node the constant fetch node
+     */
+    private function isNativeConstantFetch(ConstFetch $node): bool
+    {
+        return in_array($node->name->toLowerString(), ['true', 'false', 'null'], true);
+    }
+
+    /**
+     * Resolves a constant fetch name with NameResolver attributes when available.
+     *
+     * @param Name $name the constant fetch name
+     */
+    private function resolveConstantFetchName(Name $name): string
+    {
+        $resolvedName = $name->getAttribute('resolvedName');
+
+        if ($resolvedName instanceof Name) {
+            return $resolvedName->toString();
+        }
+
+        $namespacedName = $name->getAttribute('namespacedName');
+
+        if ($namespacedName instanceof Name) {
+            return $namespacedName->toString();
+        }
+
+        if (is_string($namespacedName) && '' !== $namespacedName) {
+            return $namespacedName;
+        }
+
+        if ($name->isFullyQualified() || '' === $this->state->currentNamespace()) {
+            return ltrim($name->toString(), '\\');
+        }
+
+        return $this->state->currentNamespace().'\\'.$name->toString();
     }
 
     /**

@@ -14,4 +14,5 @@ enum MemberType
     case CLASS_CONSTANT;
     case FUNCTION_;
     case PARAMETER;
+    case CONSTANT;
 }

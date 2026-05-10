@@ -132,6 +132,16 @@ final readonly class MemberGraphImpactService
     }
 
     /**
+     * Resolves impact information for one global or namespaced constant.
+     *
+     * @param string $name the fully-qualified constant name
+     */
+    public function constant(string $name): MemberGraphImpact
+    {
+        return $this->target(MemberImpactTarget::constant($name));
+    }
+
+    /**
      * Resolves impact information for one parameter.
      *
      * @param string   $owner            the owner FQCN, or an empty string for functions

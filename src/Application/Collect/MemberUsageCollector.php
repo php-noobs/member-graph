@@ -161,6 +161,28 @@ final readonly class MemberUsageCollector
     }
 
     /**
+     * Collects one global or namespaced constant fetch usage.
+     *
+     * @param string            $sourceSymbol the source symbol
+     * @param string            $constantName the fully-qualified constant name
+     * @param SourceNodeId|null $sourceNodeId the source node identifier when available
+     */
+    public function collectConstantFetch(
+        string $sourceSymbol,
+        string $constantName,
+        ?SourceNodeId $sourceNodeId = null,
+    ): void {
+        $this->addUsage(
+            $sourceSymbol,
+            '',
+            $constantName,
+            MemberType::CONSTANT,
+            MemberUsageType::CONSTANT_FETCH,
+            $sourceNodeId,
+        );
+    }
+
+    /**
      * Adds one member usage to the collection.
      *
      * @param string            $sourceSymbol the source symbol

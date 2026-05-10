@@ -16,4 +16,5 @@ enum MemberUsageType
     case CLASS_CONST_FETCH;
     case FUNCTION_CALL;
     case PARAMETER_NAMED_ARG;
+    case CONSTANT_FETCH;
 }

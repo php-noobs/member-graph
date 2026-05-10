@@ -20,6 +20,7 @@ use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Const_;
 use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
@@ -33,6 +34,7 @@ use PhpParser\Node\Param;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Const_ as ConstStatement;
 use PhpParser\Node\Stmt\Enum_;
 use PhpParser\Node\Stmt\EnumCase;
 use PhpParser\Node\Stmt\Function_;
@@ -144,6 +146,16 @@ final readonly class MemberGraphSourceNodeLocator
     public function function(string $name): VirtualPhpSourceFileNodeMatchCollection
     {
         return $this->target(MemberImpactTarget::forFunction($name));
+    }
+
+    /**
+     * Locates source nodes for one global or namespaced constant target.
+     *
+     * @param string $name the fully-qualified constant name
+     */
+    public function constant(string $name): VirtualPhpSourceFileNodeMatchCollection
+    {
+        return $this->target(MemberImpactTarget::constant($name));
     }
 
     /**
@@ -1131,6 +1143,12 @@ final readonly class MemberGraphSourceNodeLocator
                 && $this->functionNameMatches($this->resolvedFunctionName($node, $currentOwner), $memberId->name);
         }
 
+        if (MemberType::CONSTANT === $memberId->type) {
+            return $node instanceof Const_
+                && $node->name->toString() === $this->shortName($memberId->name)
+                && $node->getAttribute('parent') instanceof ConstStatement;
+        }
+
         return false;
     }
 
@@ -1229,6 +1247,11 @@ final readonly class MemberGraphSourceNodeLocator
             return $node instanceof FuncCall
                 && $node->name instanceof Name
                 && $this->functionNameMatches($this->resolvedName($node->name), $memberId->name);
+        }
+
+        if (MemberType::CONSTANT === $memberId->type) {
+            return $node instanceof ConstFetch
+                && $this->constantNameMatches($this->resolvedName($node->name), $memberId->name);
         }
 
         return false;
@@ -1412,6 +1435,33 @@ final readonly class MemberGraphSourceNodeLocator
     private function functionNameMatches(string $actualName, string $targetName): bool
     {
         return ltrim($actualName, '\\') === ltrim($targetName, '\\');
+    }
+
+    /**
+     * Indicates whether two constant names designate the same target.
+     *
+     * @param string $actualName the actual constant name
+     * @param string $targetName the target constant name
+     */
+    private function constantNameMatches(string $actualName, string $targetName): bool
+    {
+        return ltrim($actualName, '\\') === ltrim($targetName, '\\');
+    }
+
+    /**
+     * Returns the short name part of one FQCN.
+     *
+     * @param string $fqcn the FQCN
+     */
+    private function shortName(string $fqcn): string
+    {
+        $position = strrpos($fqcn, '\\');
+
+        if (false === $position) {
+            return $fqcn;
+        }
+
+        return substr($fqcn, $position + 1);
     }
 
     /**

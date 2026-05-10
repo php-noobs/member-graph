@@ -55,6 +55,7 @@ Use `MemberGraphSourceNodeLocator` to locate exact PHPParser nodes inside impact
 $locator = MemberGraphSourceNodeLocator::fromBuild($build);
 
 $matches = $locator->method('App\\Service\\UserService', 'send');
+$constantMatches = $locator->constant('App\\Config\\ENABLED');
 $parameterMatches = $locator->parameter('App\\Service\\UserService', 'send', 'message', 0);
 $parameterScope = $locator->parameterScope('App\\Service\\UserService', 'send', 'message', 0);
 $ownerMatches = $locator->owner('App\\Service\\UserService');
@@ -70,6 +71,8 @@ Property lookup returns promoted-property `Param` nodes as `MEMBER_DECLARATION`.
 When the property target is a promoted property, lookup also returns `PROMOTED_PROPERTY_PARAMETER_LOCAL_USAGE` matches for local `Variable` nodes that refer to the promoted constructor parameter.
 Method lookup follows trait-projected available-member families.
 For trait source methods, consumer calls resolved through a consuming class are returned as `MEMBER_USAGE`, alias adaptation source references are returned as `TRAIT_ALIAS_ADAPTATION_SOURCE`, and precedence adaptation method references are returned as `TRAIT_PRECEDENCE_ADAPTATION_METHOD`.
+Constant lookup returns namespace-level `const` items as `MEMBER_DECLARATION` and resolved constant fetches as `MEMBER_USAGE`.
+`use const` items are exposed by import scopes rather than by source-node usage lookup.
 Use `parameterScope()` when a caller needs neutral facts about the declaring scope: same-signature `Param` nodes, assigned local `Variable` nodes, and targeted parameter local usages.
 MemberGraph exposes those facts without deciding whether they are rename conflicts.
 
@@ -85,6 +88,7 @@ $propertyScope = $scopeLocator->propertyScope('App\\Mailer', 'transport');
 $constantScope = $scopeLocator->classConstantScope('App\\Status', 'ACTIVE');
 $classLikeScope = $scopeLocator->classLikeNamespaceScope('App\\Domain');
 $functionScope = $scopeLocator->functionNamespaceScope('App\\Domain');
+$namespaceConstantScope = $scopeLocator->constantNamespaceScope('App\\Domain');
 $importScope = $scopeLocator->fileImportScope($virtualFile);
 ```
 

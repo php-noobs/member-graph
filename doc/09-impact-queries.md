@@ -57,6 +57,7 @@ It also supports direct helpers for other target families:
 $impactService->property('App\\Config', 'mailer');
 $impactService->classConstant('App\\Config', 'DEFAULT_MAILER');
 $impactService->function('App\\send_mail');
+$impactService->constant('App\\Config\\ENABLED');
 $impactService->parameter('App\\Mailer', 'send', 'message');
 $impactService->owner('App\\Mailer');
 ```
@@ -70,11 +71,12 @@ MemberImpactTarget::method('App\\Mailer', 'send');
 MemberImpactTarget::property('App\\Config', 'mailer');
 MemberImpactTarget::classConstant('App\\Config', 'DEFAULT_MAILER');
 MemberImpactTarget::forFunction('App\\send_mail');
+MemberImpactTarget::constant('App\\Config\\ENABLED');
 MemberImpactTarget::parameter('App\\Mailer', 'send', 'message');
 MemberImpactTarget::owner('App\\Mailer');
 ```
 
-Function targets use an empty member owner internally, matching how function declarations and usages are represented by the graph.
+Function and constant targets use an empty member owner internally, matching how namespace-level declarations and usages are represented by the graph.
 
 ## Result DTO
 
@@ -144,6 +146,7 @@ It also supports the same target families as `MemberGraphImpactService`:
 $locator->property('App\\Config', 'mailer');
 $locator->classConstant('App\\Config', 'DEFAULT_MAILER');
 $locator->function('App\\send_mail');
+$locator->constant('App\\Config\\ENABLED');
 $locator->parameter('App\\Mailer', 'send', 'message');
 $locator->parameter('App\\Mailer', 'send', 'message', 0);
 $locator->parameterAt('App\\Mailer', 'send', 'message', 0);
@@ -250,6 +253,18 @@ $precedenceMethods = $matches->traitPrecedenceAdaptationMethods();
 The alias name `traitSend` is not returned for `method('App\\MailerTrait', 'send')`; it is a distinct projected method name exposed on the consuming class.
 `traitPrecedenceAdaptationMethods()` returns `PhpParser\Node\Stmt\TraitUseAdaptation\Precedence` nodes and targets the preferred method side of `PrimaryTrait::send insteadof SecondaryTrait`.
 
+For namespace-level constants, constant lookup returns `MEMBER_DECLARATION` for the exact `PhpParser\Node\Const_` item and `MEMBER_USAGE` for resolved `PhpParser\Node\Expr\ConstFetch` usages:
+
+```php
+$matches = $locator->constant('App\\Config\\ENABLED');
+
+$declaration = $matches->memberDeclarations();
+$constantFetches = $matches->memberUsages();
+```
+
+`use const` import items are not returned as source-node usage matches.
+They remain neutral import-scope facts exposed through `MemberGraphSymbolScopeLocator::fileImportScope($virtualFile)->constantImports()`.
+
 Parameter scope lookup exposes broader neutral facts around the exact matched declaration:
 
 ```php
@@ -275,6 +290,7 @@ $scopeLocator->propertyScope('App\\Mailer', 'transport')->propertyDeclarations()
 $scopeLocator->classConstantScope('App\\Status', 'ACTIVE')->classConstantDeclarations();
 $scopeLocator->classLikeNamespaceScope('App\\Domain')->classLikeDeclarations();
 $scopeLocator->functionNamespaceScope('App\\Domain')->functionDeclarations();
+$scopeLocator->constantNamespaceScope('App\\Domain')->constantDeclarations();
 $scopeLocator->fileImportScope($virtualFile)->classLikeImports();
 ```
 

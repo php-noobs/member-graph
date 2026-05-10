@@ -15,6 +15,7 @@ use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Const_;
 use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\NullsafeMethodCall;
@@ -764,6 +765,33 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
     }
 
     /**
+     * Ensures real factory builds locate global constant declarations and resolved usages.
+     */
+    public function testFactoryBuildSourceNodeIdsDriveStrictConstantLookup(): void
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+        $configFilePath = $srcDirectory.'/config.php';
+        $runnerFilePath = $srcDirectory.'/Runner.php';
+
+        mkdir($srcDirectory, 0o777, true);
+        $this->writeConstantConfigFile($configFilePath);
+        $this->writeConstantRunnerFile($runnerFilePath);
+
+        $build = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+        $locator = MemberGraphSourceNodeLocator::fromBuild($build);
+
+        $matches = $locator->constant('App\\Config\\ENABLED');
+
+        self::assertCount(2, $matches);
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_DECLARATION, Const_::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_USAGE, ConstFetch::class));
+    }
+
+    /**
      * Writes the mailer fixture.
      *
      * @param string $filePath the file path
@@ -1114,6 +1142,46 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
                 public function run(): Transport
                 {
                     return Transport::SMTP;
+                }
+            }
+            PHP);
+    }
+
+    /**
+     * Writes a global constant fixture.
+     *
+     * @param string $filePath the file path
+     */
+    private function writeConstantConfigFile(string $filePath): void
+    {
+        file_put_contents($filePath, <<<'PHP'
+            <?php
+
+            namespace App\Config;
+
+            const ENABLED = true;
+            PHP);
+    }
+
+    /**
+     * Writes a runner fixture using a global constant import.
+     *
+     * @param string $filePath the file path
+     */
+    private function writeConstantRunnerFile(string $filePath): void
+    {
+        file_put_contents($filePath, <<<'PHP'
+            <?php
+
+            namespace App\Controller;
+
+            use const App\Config\ENABLED;
+
+            final class Runner
+            {
+                public function run(): bool
+                {
+                    return ENABLED;
                 }
             }
             PHP);

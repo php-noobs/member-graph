@@ -311,7 +311,7 @@ final class MemberGraphTraversalState
     public function currentNamespace(): string
     {
         if ('global' === $this->currentClass || !str_contains($this->currentClass, '\\')) {
-            return '';
+            return $this->context->namespace;
         }
 
         $pos = strrpos($this->currentClass, '\\');

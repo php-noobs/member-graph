@@ -85,6 +85,16 @@ final readonly class MemberImpactTarget
     }
 
     /**
+     * Creates a global or namespaced constant impact target.
+     *
+     * @param string $name the fully-qualified constant name
+     */
+    public static function constant(string $name): self
+    {
+        return self::member('', $name, MemberType::CONSTANT);
+    }
+
+    /**
      * Creates a parameter impact target.
      *
      * @param string   $owner            the owner FQCN, or an empty string for functions

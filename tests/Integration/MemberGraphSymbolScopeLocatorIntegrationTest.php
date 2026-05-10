@@ -300,6 +300,29 @@ final class MemberGraphSymbolScopeLocatorIntegrationTest extends TestCase
     }
 
     /**
+     * Ensures constant namespace scope exposes declarations and short names.
+     */
+    public function testFactoryBuildLocatesConstantNamespaceScopeFacts(): void
+    {
+        $build = $this->createBuildFromSources([
+            'constants.php' => <<<'PHP'
+                <?php
+
+                namespace App\Domain;
+
+                const ENABLED = true;
+                const DISABLED = false;
+                PHP,
+        ]);
+        $scope = MemberGraphSymbolScopeLocator::fromBuild($build)->constantNamespaceScope('App\\Domain');
+
+        self::assertCount(2, $scope->constantDeclarations());
+        self::assertTrue($scope->constantDeclarations()->hasShortName('ENABLED'));
+        self::assertTrue($scope->constantDeclarations()->hasShortName('DISABLED'));
+        self::assertInstanceOf(Const_::class, $scope->constantDeclarations()->all()[0]->node);
+    }
+
+    /**
      * Ensures file import scope exposes class-like, function, and constant imports with aliases.
      */
     public function testFactoryBuildLocatesFileImportScopeFacts(): void

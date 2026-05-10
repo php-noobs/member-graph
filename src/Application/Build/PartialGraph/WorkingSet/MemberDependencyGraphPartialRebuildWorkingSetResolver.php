@@ -186,6 +186,7 @@ final readonly class MemberDependencyGraphPartialRebuildWorkingSetResolver
             MemberType::PROPERTY => MemberImpactTarget::property($memberId->owner, $memberId->name),
             MemberType::CLASS_CONSTANT => MemberImpactTarget::classConstant($memberId->owner, $memberId->name),
             MemberType::FUNCTION_ => MemberImpactTarget::forFunction($memberId->name),
+            MemberType::CONSTANT => MemberImpactTarget::constant($memberId->name),
             MemberType::PARAMETER => null,
         };
     }

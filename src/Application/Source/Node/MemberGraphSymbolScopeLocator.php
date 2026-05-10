@@ -20,9 +20,11 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Param;
 use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Const_ as ConstStatement;
 use PhpParser\Node\Stmt\EnumCase;
 use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\GroupUse;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\PropertyProperty;
 use PhpParser\Node\Stmt\Use_;
 use PhpParser\Node\UseItem;
@@ -143,6 +145,24 @@ final readonly class MemberGraphSymbolScopeLocator
         foreach ($this->virtualFiles as $virtualFile) {
             foreach ($virtualFile->getAst() as $node) {
                 $this->collectFunctionNamespaceFacts($node, $virtualFile, $namespace, $facts);
+            }
+        }
+
+        return new MemberGraphSymbolScope($facts);
+    }
+
+    /**
+     * Locates constant declarations in one namespace.
+     *
+     * @param string $namespace the namespace FQCN without leading slash
+     */
+    public function constantNamespaceScope(string $namespace): MemberGraphSymbolScope
+    {
+        $facts = new MemberGraphSymbolScopeFactCollection();
+
+        foreach ($this->virtualFiles as $virtualFile) {
+            foreach ($virtualFile->getAst() as $node) {
+                $this->collectConstantNamespaceFacts($node, $virtualFile, $namespace, $facts);
             }
         }
 
@@ -454,9 +474,14 @@ final readonly class MemberGraphSymbolScopeLocator
             );
         }
 
-        return MemberType::CLASS_CONSTANT === $memberId->type
+        if (MemberType::CLASS_CONSTANT === $memberId->type) {
+            return $node instanceof Const_
+                && $node->name->toString() === $memberId->name;
+        }
+
+        return MemberType::CONSTANT === $memberId->type
             && $node instanceof Const_
-            && $node->name->toString() === $memberId->name;
+            && $node->name->toString() === $this->shortName($memberId->name);
     }
 
     /**
@@ -528,6 +553,45 @@ final readonly class MemberGraphSymbolScopeLocator
         $this->collectFromChildren(
             node: $node,
             collector: fn (Node $child): null => $this->collectFunctionNamespaceFacts($child, $virtualFile, $namespace, $facts),
+        );
+    }
+
+    /**
+     * Collects constant declaration facts recursively.
+     *
+     * @param Node                                 $node        the node to inspect
+     * @param VirtualPhpSourceFile                 $virtualFile the virtual source file
+     * @param string                               $namespace   the namespace to match
+     * @param MemberGraphSymbolScopeFactCollection $facts       the output facts
+     */
+    private function collectConstantNamespaceFacts(
+        Node $node,
+        VirtualPhpSourceFile $virtualFile,
+        string $namespace,
+        MemberGraphSymbolScopeFactCollection $facts,
+    ): void {
+        if ($node instanceof ConstStatement) {
+            foreach ($node->consts as $constant) {
+                $fqcn = $this->constantDeclarationName($constant->name->toString(), $node);
+
+                if ($this->namespaceOf($fqcn) !== $namespace) {
+                    continue;
+                }
+
+                $facts->add(new MemberGraphSymbolScopeFact(
+                    virtualFile: $virtualFile,
+                    node: $constant,
+                    role: MemberGraphSymbolScopeFactRole::CONSTANT_NAMESPACE_DECLARATION,
+                    name: $constant->name->toString(),
+                    fqcn: $fqcn,
+                    shortName: $constant->name->toString(),
+                ));
+            }
+        }
+
+        $this->collectFromChildren(
+            node: $node,
+            collector: fn (Node $child): null => $this->collectConstantNamespaceFacts($child, $virtualFile, $namespace, $facts),
         );
     }
 
@@ -649,6 +713,23 @@ final readonly class MemberGraphSymbolScopeLocator
         }
 
         return substr($fqcn, 0, $position);
+    }
+
+    /**
+     * Resolves one namespace-level constant declaration FQCN.
+     *
+     * @param string         $name           the local constant name
+     * @param ConstStatement $constStatement the constant statement node
+     */
+    private function constantDeclarationName(string $name, ConstStatement $constStatement): string
+    {
+        $parent = $constStatement->getAttribute('parent');
+
+        if ($parent instanceof Namespace_ && $parent->name instanceof Name) {
+            return $parent->name->toString().'\\'.$name;
+        }
+
+        return $name;
     }
 
     /**

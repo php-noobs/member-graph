@@ -12,6 +12,7 @@ use PhpNoobs\MemberGraph\Domain\Source\SourceNodeId;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Stmt\ClassConst;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Const_ as ConstStatement;
 use PhpParser\Node\Stmt\EnumCase;
 use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\Property;
@@ -73,6 +74,27 @@ final readonly class MemberDeclarationCollector
             file: $this->virtualFilePath,
             sourceNodeId: SourceNodeId::fromNode($this->virtualFilePath, $function),
         ));
+    }
+
+    /**
+     * Collects global or namespaced constant declarations.
+     *
+     * @param ConstStatement $constStatement the constant statement node
+     * @param string         $namespace      the current namespace
+     */
+    public function collectConstants(ConstStatement $constStatement, string $namespace): void
+    {
+        foreach ($constStatement->consts as $constant) {
+            $this->declarations->add(new MemberDeclaration(
+                id: new MemberId(
+                    owner: '',
+                    name: $this->constantName($constant->name->toString(), $namespace),
+                    type: MemberType::CONSTANT,
+                ),
+                file: $this->virtualFilePath,
+                sourceNodeId: SourceNodeId::fromNode($this->virtualFilePath, $constant),
+            ));
+        }
     }
 
     /**
@@ -175,5 +197,20 @@ final readonly class MemberDeclarationCollector
                 sourceNodeId: SourceNodeId::fromNode($this->virtualFilePath, $param),
             ));
         }
+    }
+
+    /**
+     * Resolves one constant declaration name against its namespace.
+     *
+     * @param string $name      the local constant name
+     * @param string $namespace the current namespace
+     */
+    private function constantName(string $name, string $namespace): string
+    {
+        if ('' === $namespace) {
+            return $name;
+        }
+
+        return $namespace.'\\'.$name;
     }
 }
