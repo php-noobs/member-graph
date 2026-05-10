@@ -6,6 +6,8 @@ namespace PhpNoobs\MemberGraph\Application\Impact;
 
 use PhpNoobs\MemberGraph\Domain\Declaration\MemberDeclarationCollection;
 use PhpNoobs\MemberGraph\Domain\Graph\MemberDependencyGraph;
+use PhpNoobs\MemberGraph\Domain\Graph\MemberId;
+use PhpNoobs\MemberGraph\Domain\Owner\MemberLineageResolverV2;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerDeclarationCollection;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerUsage;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerUsageCollection;
@@ -19,6 +21,16 @@ use PhpNoobs\MemberGraph\Domain\Usage\MemberUsageCollection;
  */
 final readonly class MemberImpactResolver
 {
+    private MemberLineageResolverV2 $memberLineageResolver;
+
+    /**
+     * Constructor.
+     */
+    public function __construct()
+    {
+        $this->memberLineageResolver = new MemberLineageResolverV2();
+    }
+
     /**
      * Resolves impact information for the given target.
      *
@@ -36,17 +48,26 @@ final readonly class MemberImpactResolver
         $impactedFiles = new ImpactedFileCollection();
 
         if (null !== $target->memberId) {
-            $declaration = $graph->declarations->get($target->memberId);
+            foreach ($this->memberTargets($graph, $target->memberId) as $memberTarget) {
+                $ownerDeclaration = $graph->ownerDeclarations->get($memberTarget->owner);
 
-            if (null !== $declaration) {
-                $declarations->add($declaration);
-                $impactedOwners->add($declaration->id->owner);
-                $impactedFiles->add($declaration->file);
-            }
+                if (null !== $ownerDeclaration) {
+                    $impactedOwners->add($ownerDeclaration->fqcn);
+                    $impactedFiles->add($ownerDeclaration->file);
+                }
 
-            foreach ($graph->usages->getByTarget($target->memberId) as $usage) {
-                $memberUsages->add($usage);
-                $this->addUsageImpact($usage, $impactedOwners, $impactedFiles);
+                $declaration = $graph->declarations->get($memberTarget);
+
+                if (null !== $declaration) {
+                    $declarations->add($declaration);
+                    $impactedOwners->add($declaration->id->owner);
+                    $impactedFiles->add($declaration->file);
+                }
+
+                foreach ($graph->usages->getByTarget($memberTarget) as $usage) {
+                    $memberUsages->add($usage);
+                    $this->addUsageImpact($usage, $impactedOwners, $impactedFiles);
+                }
             }
         }
 
@@ -82,6 +103,27 @@ final readonly class MemberImpactResolver
             ownerDeclarations: $ownerDeclarations,
             ownerUsages: $ownerUsages,
         );
+    }
+
+    /**
+     * Returns the member targets that belong to the same semantic family.
+     *
+     * @param MemberDependencyGraph $graph  the member dependency graph
+     * @param MemberId              $target the original member target
+     *
+     * @return list<MemberId>
+     */
+    private function memberTargets(MemberDependencyGraph $graph, MemberId $target): array
+    {
+        $targets = [];
+
+        foreach ($this->memberLineageResolver->resolveFamily($graph, $target) as $memberTarget) {
+            $targets[$memberTarget->hash()] = $memberTarget;
+        }
+
+        $targets[$target->hash()] = $target;
+
+        return array_values($targets);
     }
 
     /**

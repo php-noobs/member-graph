@@ -28,6 +28,8 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\EnumCase;
 use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\PropertyProperty;
+use PhpParser\Node\Stmt\TraitUseAdaptation\Alias;
+use PhpParser\Node\Stmt\TraitUseAdaptation\Precedence;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -681,6 +683,60 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
     }
 
     /**
+     * Ensures trait source-method lookup returns alias adaptation sources and projected consumer calls.
+     */
+    public function testFactoryBuildSourceNodeIdsDriveTraitAliasAdaptationSourceLookup(): void
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+        $fixtureFilePath = $srcDirectory.'/TraitAliasFixture.php';
+
+        mkdir($srcDirectory, 0o777, true);
+        $this->writeTraitAliasFixtureFile($fixtureFilePath);
+
+        $build = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+        $locator = MemberGraphSourceNodeLocator::fromBuild($build);
+
+        $matches = $locator->method('App\\MailerTrait', 'send');
+
+        self::assertCount(3, $matches);
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_DECLARATION, ClassMethod::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::TRAIT_ALIAS_ADAPTATION_SOURCE, Alias::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_USAGE, MethodCall::class));
+        self::assertCount(1, $matches->traitAliasAdaptationSources());
+    }
+
+    /**
+     * Ensures trait source-method lookup returns precedence adaptation method references.
+     */
+    public function testFactoryBuildSourceNodeIdsDriveTraitPrecedenceAdaptationMethodLookup(): void
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+        $fixtureFilePath = $srcDirectory.'/TraitPrecedenceFixture.php';
+
+        mkdir($srcDirectory, 0o777, true);
+        $this->writeTraitPrecedenceFixtureFile($fixtureFilePath);
+
+        $build = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+        $locator = MemberGraphSourceNodeLocator::fromBuild($build);
+
+        $matches = $locator->method('App\\PrimaryMailerTrait', 'send');
+
+        self::assertCount(3, $matches);
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_DECLARATION, ClassMethod::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::TRAIT_PRECEDENCE_ADAPTATION_METHOD, Precedence::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::MEMBER_USAGE, MethodCall::class));
+        self::assertCount(1, $matches->traitPrecedenceAdaptationMethods());
+    }
+
+    /**
      * Ensures real factory builds locate enum-case declarations as class-constant members.
      */
     public function testFactoryBuildSourceNodeIdsDriveStrictEnumCaseLookup(): void
@@ -937,6 +993,86 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
                     send_mail('hello');
                     Mailer::sendStatic('hello');
                     $mailer?->send('hello');
+                }
+            }
+            PHP);
+    }
+
+    /**
+     * Writes a trait alias fixture.
+     *
+     * @param string $filePath the file path
+     */
+    private function writeTraitAliasFixtureFile(string $filePath): void
+    {
+        file_put_contents($filePath, <<<'PHP'
+            <?php
+
+            namespace App;
+
+            trait MailerTrait
+            {
+                public function send(): void
+                {
+                }
+            }
+
+            final class Mailer
+            {
+                use MailerTrait {
+                    send as traitSend;
+                }
+            }
+
+            final class Runner
+            {
+                public function run(Mailer $mailer): void
+                {
+                    $mailer->send();
+                    $mailer->traitSend();
+                }
+            }
+            PHP);
+    }
+
+    /**
+     * Writes a trait precedence fixture.
+     *
+     * @param string $filePath the file path
+     */
+    private function writeTraitPrecedenceFixtureFile(string $filePath): void
+    {
+        file_put_contents($filePath, <<<'PHP'
+            <?php
+
+            namespace App;
+
+            trait PrimaryMailerTrait
+            {
+                public function send(): void
+                {
+                }
+            }
+
+            trait SecondaryMailerTrait
+            {
+                public function send(): void
+                {
+                }
+            }
+
+            final class Mailer
+            {
+                use PrimaryMailerTrait, SecondaryMailerTrait {
+                    PrimaryMailerTrait::send insteadof SecondaryMailerTrait;
+                }
+            }
+
+            final class Runner
+            {
+                public function run(Mailer $mailer): void
+                {
+                    $mailer->send();
                 }
             }
             PHP);

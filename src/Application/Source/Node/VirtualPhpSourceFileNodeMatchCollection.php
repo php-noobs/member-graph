@@ -142,6 +142,22 @@ final class VirtualPhpSourceFileNodeMatchCollection implements \Countable, \Iter
     }
 
     /**
+     * Returns matches referencing source method names in trait alias adaptations.
+     */
+    public function traitAliasAdaptationSources(): self
+    {
+        return $this->byRole(VirtualPhpSourceFileNodeMatchRole::TRAIT_ALIAS_ADAPTATION_SOURCE);
+    }
+
+    /**
+     * Returns matches referencing preferred method names in trait precedence adaptations.
+     */
+    public function traitPrecedenceAdaptationMethods(): self
+    {
+        return $this->byRole(VirtualPhpSourceFileNodeMatchRole::TRAIT_PRECEDENCE_ADAPTATION_METHOD);
+    }
+
+    /**
      * Indicates whether the collection contains a node with the given variable-like name.
      *
      * @param string $name the name to find without the leading "$"

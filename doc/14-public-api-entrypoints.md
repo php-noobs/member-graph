@@ -68,6 +68,8 @@ Parameter lookup also returns `PARAMETER_LOCAL_USAGE` matches for local `Variabl
 Those matches are computed on demand from the already loaded AST and are not persisted in the graph cache.
 Property lookup returns promoted-property `Param` nodes as `MEMBER_DECLARATION`.
 When the property target is a promoted property, lookup also returns `PROMOTED_PROPERTY_PARAMETER_LOCAL_USAGE` matches for local `Variable` nodes that refer to the promoted constructor parameter.
+Method lookup follows trait-projected available-member families.
+For trait source methods, consumer calls resolved through a consuming class are returned as `MEMBER_USAGE`, alias adaptation source references are returned as `TRAIT_ALIAS_ADAPTATION_SOURCE`, and precedence adaptation method references are returned as `TRAIT_PRECEDENCE_ADAPTATION_METHOD`.
 Use `parameterScope()` when a caller needs neutral facts about the declaring scope: same-signature `Param` nodes, assigned local `Variable` nodes, and targeted parameter local usages.
 MemberGraph exposes those facts without deciding whether they are rename conflicts.
 

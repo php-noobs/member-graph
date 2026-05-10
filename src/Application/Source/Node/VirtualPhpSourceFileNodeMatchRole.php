@@ -62,4 +62,14 @@ enum VirtualPhpSourceFileNodeMatchRole
      * The node uses a promoted-property parameter as a local variable inside the declaring constructor body.
      */
     case PROMOTED_PROPERTY_PARAMETER_LOCAL_USAGE;
+
+    /**
+     * The node references the source method name in a trait alias adaptation.
+     */
+    case TRAIT_ALIAS_ADAPTATION_SOURCE;
+
+    /**
+     * The node references the preferred method name in a trait precedence adaptation.
+     */
+    case TRAIT_PRECEDENCE_ADAPTATION_METHOD;
 }

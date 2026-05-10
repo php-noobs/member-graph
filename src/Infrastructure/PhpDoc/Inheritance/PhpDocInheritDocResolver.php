@@ -24,7 +24,7 @@ use PHPStan\PhpDocParser\Parser\PhpDocParser;
 use PHPStan\PhpDocParser\Parser\TokenIterator;
 
 /**
- * Resolves effective PHPDoc when {@inheritDoc is used.}
+ * Resolves effective PHPDoc when {@±inheritDoc} is used.
  */
 final class PhpDocInheritDocResolver
 {
@@ -89,8 +89,8 @@ final class PhpDocInheritDocResolver
      * Strategy:
      * - if the child has no doc, the first valid resolved parent doc is returned
      * - if the child doc has no marker, the child doc is returned as-is
-     * - if the child doc has @inheritDoc, each parent is considered in order
-     * - if a parent also contains @inheritDoc, it is first resolved recursively against the remaining parents
+     * - if the child doc has @±inheritDoc, each parent is considered in order
+     * - if a parent also contains @±inheritDoc, it is first resolved recursively against the remaining parents
      * - the first valid merged result is returned
      * - issues are collected for unusable parents, incoherent merges, and missing valid parent docs
      *
@@ -394,7 +394,7 @@ final class PhpDocInheritDocResolver
     }
 
     /**
-     * Returns whether one doc comment contains or @inheritdoc.
+     * Returns whether one doc comment contains {@±inheritdoc} or @±inheritdoc.
      *
      * @param Doc $doc the doc comment to inspect
      */
@@ -541,9 +541,9 @@ final class PhpDocInheritDocResolver
     }
 
     /**
-     * Extracts the parameter name from one @param line.
+     * Extracts the parameter name from one @±param line.
      *
-     * @param string $line the raw @param line
+     * @param string $line the raw @±param line
      */
     private function extractParamName(string $line): ?string
     {

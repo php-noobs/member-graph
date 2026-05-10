@@ -173,7 +173,7 @@ $sourceFiles = $matches->virtualFiles();
 $nodes = $matches->nodes();
 ```
 
-Available filters are `byRole()`, `ownerDeclarations()`, `ownerUsages()`, `memberDeclarations()`, `memberUsages()`, `parameterDeclarations()`, `parameterUsages()`, `parameterLocalUsages()`, `parameterScopeParameters()`, `parameterScopeLocalVariables()`, `promotedPropertyParameterLocalUsages()`, `byVirtualFilePath()`, `byNodeClass()`, and `hasName()`.
+Available filters are `byRole()`, `ownerDeclarations()`, `ownerUsages()`, `memberDeclarations()`, `memberUsages()`, `parameterDeclarations()`, `parameterUsages()`, `parameterLocalUsages()`, `parameterScopeParameters()`, `parameterScopeLocalVariables()`, `promotedPropertyParameterLocalUsages()`, `traitAliasAdaptationSources()`, `traitPrecedenceAdaptationMethods()`, `byVirtualFilePath()`, `byNodeClass()`, and `hasName()`.
 
 Match roles are intentionally split between owners, members, and parameters.
 Owners are class-like symbols such as classes, interfaces, traits, and enums.
@@ -189,7 +189,9 @@ Parameters are the named inputs of a method, closure, or function and are tracke
 - `PARAMETER_LOCAL_USAGE`: the `Variable` node uses the target parameter inside its declaring body;
 - `PARAMETER_SCOPE_PARAMETER`: the `Param` node declares one parameter in the same signature as the target parameter;
 - `PARAMETER_SCOPE_LOCAL_VARIABLE`: the `Variable` node declares or assigns one local variable in the same body as the target parameter;
-- `PROMOTED_PROPERTY_PARAMETER_LOCAL_USAGE`: the `Variable` node uses a promoted-property parameter inside the declaring constructor body.
+- `PROMOTED_PROPERTY_PARAMETER_LOCAL_USAGE`: the `Variable` node uses a promoted-property parameter inside the declaring constructor body;
+- `TRAIT_ALIAS_ADAPTATION_SOURCE`: the `TraitUseAdaptation\Alias` node references the source method name in a trait alias adaptation;
+- `TRAIT_PRECEDENCE_ADAPTATION_METHOD`: the `TraitUseAdaptation\Precedence` node references the preferred method name in a trait precedence adaptation.
 
 The locator does not rebuild the graph and does not scan the full codebase.
 It first asks the impact service for impacted virtual files, then re-traverses only those ASTs.
@@ -226,6 +228,27 @@ $constructorVariables = $matches->promotedPropertyParameterLocalUsages();
 ```
 
 These promoted-parameter local usages are computed on demand from the constructor AST and are not persisted in `MemberDependencyGraph` or in the cache.
+
+For trait-projected methods, method lookup follows the available-member family.
+If `App\\MailerTrait::send` is projected as `App\\Mailer::send`, consumer calls resolved to the projected method are returned as `MEMBER_USAGE`:
+
+```php
+$matches = $locator->method('App\\MailerTrait', 'send');
+
+$declaration = $matches->memberDeclarations();
+$consumerCalls = $matches->memberUsages();
+```
+
+Trait adaptation source references are exposed with dedicated roles:
+
+```php
+$aliasSources = $matches->traitAliasAdaptationSources();
+$precedenceMethods = $matches->traitPrecedenceAdaptationMethods();
+```
+
+`traitAliasAdaptationSources()` returns `PhpParser\Node\Stmt\TraitUseAdaptation\Alias` nodes and targets the source method side of `send as traitSend`.
+The alias name `traitSend` is not returned for `method('App\\MailerTrait', 'send')`; it is a distinct projected method name exposed on the consuming class.
+`traitPrecedenceAdaptationMethods()` returns `PhpParser\Node\Stmt\TraitUseAdaptation\Precedence` nodes and targets the preferred method side of `PrimaryTrait::send insteadof SecondaryTrait`.
 
 Parameter scope lookup exposes broader neutral facts around the exact matched declaration:
 

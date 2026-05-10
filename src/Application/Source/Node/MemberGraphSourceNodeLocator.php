@@ -40,6 +40,9 @@ use PhpParser\Node\Stmt\Interface_;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\PropertyProperty;
 use PhpParser\Node\Stmt\Trait_;
+use PhpParser\Node\Stmt\TraitUse;
+use PhpParser\Node\Stmt\TraitUseAdaptation\Alias;
+use PhpParser\Node\Stmt\TraitUseAdaptation\Precedence;
 use PhpParser\Node\VarLikeIdentifier;
 
 /**
@@ -416,6 +419,16 @@ final readonly class MemberGraphSourceNodeLocator
             return;
         }
 
+        if (null !== $target->memberId && $this->matchTraitAdaptationNode(
+            $node,
+            $virtualFile,
+            $target,
+            $target->memberId,
+            $matches,
+        )) {
+            return;
+        }
+
         if (null !== $target->parameterId && $this->matchParameterDeclarationNode(
             $node,
             $virtualFile,
@@ -521,6 +534,51 @@ final readonly class MemberGraphSourceNodeLocator
                 node: $node,
                 target: $target,
                 role: VirtualPhpSourceFileNodeMatchRole::PARAMETER_USAGE,
+            ));
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Matches one trait adaptation node against a method target.
+     *
+     * @param Node                                    $node        the node to match
+     * @param VirtualPhpSourceFile                    $virtualFile the virtual file containing the node
+     * @param MemberImpactTarget                      $target      the original impact target
+     * @param MemberId                                $memberId    the method identifier
+     * @param VirtualPhpSourceFileNodeMatchCollection $matches     the output match collection
+     */
+    private function matchTraitAdaptationNode(
+        Node $node,
+        VirtualPhpSourceFile $virtualFile,
+        MemberImpactTarget $target,
+        MemberId $memberId,
+        VirtualPhpSourceFileNodeMatchCollection $matches,
+    ): bool {
+        if (MemberType::METHOD !== $memberId->type) {
+            return false;
+        }
+
+        if ($node instanceof Alias && $this->isTraitAliasAdaptationSource($node, $memberId)) {
+            $matches->add(new VirtualPhpSourceFileNodeMatch(
+                virtualFile: $virtualFile,
+                node: $node,
+                target: $target,
+                role: VirtualPhpSourceFileNodeMatchRole::TRAIT_ALIAS_ADAPTATION_SOURCE,
+            ));
+
+            return true;
+        }
+
+        if ($node instanceof Precedence && $this->isTraitPrecedenceAdaptationMethod($node, $memberId)) {
+            $matches->add(new VirtualPhpSourceFileNodeMatch(
+                virtualFile: $virtualFile,
+                node: $node,
+                target: $target,
+                role: VirtualPhpSourceFileNodeMatchRole::TRAIT_PRECEDENCE_ADAPTATION_METHOD,
             ));
 
             return true;
@@ -972,6 +1030,69 @@ final readonly class MemberGraphSourceNodeLocator
         }
 
         return false;
+    }
+
+    /**
+     * Indicates whether an alias adaptation references the targeted source trait method.
+     *
+     * @param Alias    $node     the alias adaptation node to inspect
+     * @param MemberId $memberId the method identifier
+     */
+    private function isTraitAliasAdaptationSource(Alias $node, MemberId $memberId): bool
+    {
+        return $node->method->toString() === $memberId->name
+            && $this->traitAdaptationOwnerMatches($node, $memberId);
+    }
+
+    /**
+     * Indicates whether a precedence adaptation references the targeted preferred trait method.
+     *
+     * @param Precedence $node     the precedence adaptation node to inspect
+     * @param MemberId   $memberId the method identifier
+     */
+    private function isTraitPrecedenceAdaptationMethod(Precedence $node, MemberId $memberId): bool
+    {
+        return $node->method->toString() === $memberId->name
+            && $this->traitAdaptationOwnerMatches($node, $memberId);
+    }
+
+    /**
+     * Indicates whether a trait adaptation belongs to the targeted trait owner.
+     *
+     * @param Alias|Precedence $node     the trait adaptation node to inspect
+     * @param MemberId         $memberId the method identifier
+     */
+    private function traitAdaptationOwnerMatches(Alias|Precedence $node, MemberId $memberId): bool
+    {
+        $traitName = $node->trait;
+
+        if ($traitName instanceof Name) {
+            return $this->ownerNameMatches($this->resolvedName($traitName), $memberId->owner);
+        }
+
+        $traitUse = $this->traitUseForAdaptation($node);
+
+        if (!$traitUse instanceof TraitUse || 1 !== count($traitUse->traits)) {
+            return false;
+        }
+
+        return $this->ownerNameMatches($this->resolvedName($traitUse->traits[0]), $memberId->owner);
+    }
+
+    /**
+     * Returns the trait-use node containing one adaptation.
+     *
+     * @param Alias|Precedence $node the trait adaptation node
+     */
+    private function traitUseForAdaptation(Alias|Precedence $node): ?TraitUse
+    {
+        $parent = $node->getAttribute('parent');
+
+        if ($parent instanceof TraitUse) {
+            return $parent;
+        }
+
+        return null;
     }
 
     /**
