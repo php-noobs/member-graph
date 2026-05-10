@@ -137,10 +137,15 @@ final readonly class MemberGraphImpactService
      * @param string $owner            the owner FQCN, or an empty string for functions
      * @param string $functionLikeName the method name or fully-qualified function name
      * @param string $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex the optional zero-based declaration index
      */
-    public function parameter(string $owner, string $functionLikeName, string $parameterName): MemberGraphImpact
-    {
-        return $this->target(MemberImpactTarget::parameter($owner, $functionLikeName, $parameterName));
+    public function parameter(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        ?int $parameterIndex = null,
+    ): MemberGraphImpact {
+        return $this->target(MemberImpactTarget::parameter($owner, $functionLikeName, $parameterName, $parameterIndex));
     }
 
     /**

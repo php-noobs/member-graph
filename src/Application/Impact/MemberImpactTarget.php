@@ -90,12 +90,17 @@ final readonly class MemberImpactTarget
      * @param string $owner            the owner FQCN, or an empty string for functions
      * @param string $functionLikeName the method name or fully-qualified function name
      * @param string $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex the optional zero-based declaration index
      */
-    public static function parameter(string $owner, string $functionLikeName, string $parameterName): self
-    {
+    public static function parameter(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        ?int $parameterIndex = null,
+    ): self {
         return new self(
             memberId: null,
-            parameterId: new ParameterId($owner, $functionLikeName, $parameterName),
+            parameterId: new ParameterId($owner, $functionLikeName, $parameterName, $parameterIndex),
             owner: null,
         );
     }

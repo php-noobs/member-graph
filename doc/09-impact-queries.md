@@ -145,6 +145,8 @@ $locator->property('App\\Config', 'mailer');
 $locator->classConstant('App\\Config', 'DEFAULT_MAILER');
 $locator->function('App\\send_mail');
 $locator->parameter('App\\Mailer', 'send', 'message');
+$locator->parameter('App\\Mailer', 'send', 'message', 0);
+$locator->parameterAt('App\\Mailer', 'send', 'message', 0);
 $locator->owner('App\\Mailer');
 ```
 
@@ -192,6 +194,17 @@ This prevents same-name nodes in the same virtual file from being returned when 
 
 For parameter targets, the locator also includes the declaration virtual file of the method or function so callers can inspect both the parameter declaration and named-argument usages.
 Parameter usage nodes are matched by `SourceNodeId`; parameter declaration nodes are matched inside the exact target function-like declaration by parameter name.
+
+Parameter lookup can optionally receive a zero-based declaration index:
+
+```php
+$matches = $locator->parameter('App\\Mailer', 'send', 'message', 0);
+```
+
+When the index is provided, `PARAMETER_DECLARATION` matches must satisfy both the parameter name and the declaration index.
+The index is part of the `ParameterId` identity used by impact targets, so indexed and non-indexed parameter targets do not share the same exact hash.
+This allows rename tooling to target one parameter during temporary swap states where two parameters may currently have the same name.
+Named-argument `PARAMETER_USAGE` matches remain graph-driven and continue to be returned through the name-scoped parameter lookup when the graph can relate them to the targeted parameter name.
 
 This API does not mutate code.
 It only provides source-level facts a higher-level tool may inspect.

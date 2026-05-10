@@ -55,11 +55,14 @@ Use `MemberGraphSourceNodeLocator` to locate exact PHPParser nodes inside impact
 $locator = MemberGraphSourceNodeLocator::fromBuild($build);
 
 $matches = $locator->method('App\\Service\\UserService', 'send');
+$parameterMatches = $locator->parameter('App\\Service\\UserService', 'send', 'message', 0);
 $ownerMatches = $locator->owner('App\\Service\\UserService');
 ```
 
 Use this entry point when the caller needs AST nodes for owner declarations, owner usages, member declarations, member usages, parameter declarations, or named-argument usages.
 The locator is strict by default and uses `SourceNodeId` when graph facts carry parser-position metadata.
+Parameter lookup accepts an optional zero-based declaration index so refactoring tools can target the exact `Param` node during rename swaps.
+That index is carried by the underlying `ParameterId`; indexed targets have an exact indexed hash, while named-argument usages remain discoverable through the compatible name-scoped lookup.
 
 ## Topology
 

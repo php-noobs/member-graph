@@ -144,13 +144,32 @@ final readonly class MemberGraphSourceNodeLocator
      * @param string $owner            the owner FQCN, or an empty string for functions
      * @param string $functionLikeName the method name or fully-qualified function name
      * @param string $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex the optional zero-based declaration index
      */
     public function parameter(
         string $owner,
         string $functionLikeName,
         string $parameterName,
+        ?int $parameterIndex = null,
     ): VirtualPhpSourceFileNodeMatchCollection {
-        return $this->target(MemberImpactTarget::parameter($owner, $functionLikeName, $parameterName));
+        return $this->target(MemberImpactTarget::parameter($owner, $functionLikeName, $parameterName, $parameterIndex));
+    }
+
+    /**
+     * Locates source nodes for one parameter target at a specific declaration index.
+     *
+     * @param string $owner            the owner FQCN, or an empty string for functions
+     * @param string $functionLikeName the method name or fully-qualified function name
+     * @param string $parameterName    the parameter name without "$"
+     * @param int    $parameterIndex   the zero-based declaration index
+     */
+    public function parameterAt(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        int $parameterIndex,
+    ): VirtualPhpSourceFileNodeMatchCollection {
+        return $this->parameter($owner, $functionLikeName, $parameterName, $parameterIndex);
     }
 
     /**
@@ -970,7 +989,45 @@ final readonly class MemberGraphSourceNodeLocator
             && $parameterId->functionLikeName === $currentFunctionLike
             && $node->var instanceof Variable
             && is_string($node->var->name)
-            && $node->var->name === $parameterId->parameterName;
+            && $node->var->name === $parameterId->parameterName
+            && $this->parameterIndexMatches($node, $parameterId);
+    }
+
+    /**
+     * Indicates whether one parameter declaration matches the optional target index.
+     *
+     * @param Param       $node        the parameter node to inspect
+     * @param ParameterId $parameterId the parameter identifier
+     */
+    private function parameterIndexMatches(Param $node, ParameterId $parameterId): bool
+    {
+        if (null === $parameterId->parameterIndex) {
+            return true;
+        }
+
+        return $this->parameterDeclarationIndex($node) === $parameterId->parameterIndex;
+    }
+
+    /**
+     * Resolves the zero-based index of one parameter in its declaring signature.
+     *
+     * @param Param $node the parameter node to inspect
+     */
+    private function parameterDeclarationIndex(Param $node): ?int
+    {
+        $parent = $node->getAttribute('parent');
+
+        if (!$parent instanceof ClassMethod && !$parent instanceof Function_) {
+            return null;
+        }
+
+        foreach ($parent->params as $index => $parameter) {
+            if ($parameter === $node) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**

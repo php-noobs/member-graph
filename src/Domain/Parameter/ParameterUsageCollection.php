@@ -37,11 +37,24 @@ final class ParameterUsageCollection implements \Countable, \IteratorAggregate
     /**
      * Returns usages indexed for one parameter identifier.
      *
+     * Indexed identifiers first use their exact hash, then include name-scoped usages. This keeps named-argument usages
+     * discoverable when the collector cannot know the declaration index without coupling itself to signature indexes.
+     *
      * @return list<ParameterUsage>
      */
     public function getByTarget(ParameterId $parameterId): array
     {
-        return array_values($this->byTarget[$parameterId->hash()] ?? []);
+        $usages = $this->byTarget[$parameterId->hash()] ?? [];
+
+        if (!$parameterId->hasParameterIndex()) {
+            return array_values($usages);
+        }
+
+        foreach ($this->byTarget[$parameterId->nameHash()] ?? [] as $nameScopedUsage) {
+            $usages[] = $nameScopedUsage;
+        }
+
+        return array_values($this->uniqueUsages($usages));
     }
 
     /**
@@ -68,5 +81,31 @@ final class ParameterUsageCollection implements \Countable, \IteratorAggregate
         }
 
         return $count;
+    }
+
+    /**
+     * Removes duplicate usages when exact and name-scoped hashes point to the same object.
+     *
+     * @param list<ParameterUsage> $usages the usages to de-duplicate
+     *
+     * @return list<ParameterUsage>
+     */
+    private function uniqueUsages(array $usages): array
+    {
+        $uniqueUsages = [];
+        $seen = [];
+
+        foreach ($usages as $usage) {
+            $usageKey = spl_object_id($usage);
+
+            if (isset($seen[$usageKey])) {
+                continue;
+            }
+
+            $seen[$usageKey] = true;
+            $uniqueUsages[] = $usage;
+        }
+
+        return $uniqueUsages;
     }
 }

@@ -101,6 +101,201 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
     }
 
     /**
+     * Ensures method parameter lookup keeps the existing name-only behavior when no index is provided.
+     */
+    public function testFactoryBuildLocatesMethodParameterByNameWithoutIndex(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $message): void
+                    {
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('App\\Mailer', 'send', 'message');
+
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+        self::assertSame(0, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_USAGE, Arg::class));
+    }
+
+    /**
+     * Ensures function parameter lookup keeps the existing name-only behavior when no index is provided.
+     */
+    public function testFactoryBuildLocatesFunctionParameterByNameWithoutIndex(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'functions.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                function send_mail(string $message): void
+                {
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('', 'App\\send_mail', 'message');
+
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+        self::assertSame(0, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_USAGE, Arg::class));
+    }
+
+    /**
+     * Ensures indexed method parameter lookup returns only the parameter matching both name and index.
+     */
+    public function testFactoryBuildLocatesMethodParameterByNameAndExactIndex(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $a, string $b): void
+                    {
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('App\\Mailer', 'send', 'b', 1);
+
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+        self::assertSame(1, $this->firstParameterDeclarationIndex($matches));
+    }
+
+    /**
+     * Ensures indexed method parameter lookup rejects a matching name at the wrong index.
+     */
+    public function testFactoryBuildRejectsMethodParameterWhenNameMatchesButIndexDoesNot(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $a, string $b): void
+                    {
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('App\\Mailer', 'send', 'b', 0);
+
+        self::assertSame(0, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+    }
+
+    /**
+     * Ensures indexed method parameter lookup rejects a matching index with the wrong name.
+     */
+    public function testFactoryBuildRejectsMethodParameterWhenIndexMatchesButNameDoesNot(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $a, string $b): void
+                    {
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('App\\Mailer', 'send', 'a', 1);
+
+        self::assertSame(0, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+    }
+
+    /**
+     * Ensures indexed lookup can target the second parameter after a temporary duplicate-name swap state.
+     */
+    public function testFactoryBuildLocatesSecondParameterWhenNamesAreTemporarilyDuplicated(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $b, string $b): void
+                    {
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameterAt('App\\Mailer', 'send', 'b', 1);
+
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+        self::assertSame(1, $this->firstParameterDeclarationIndex($matches));
+    }
+
+    /**
+     * Ensures indexed parameter lookup keeps named-argument usages when the graph links them to the target.
+     */
+    public function testFactoryBuildLocatesIndexedParameterDeclarationAndNamedArgumentUsage(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $a, string $b): void
+                    {
+                    }
+                }
+                PHP,
+            'Runner.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Runner
+                {
+                    public function run(Mailer $mailer): void
+                    {
+                        $mailer->send(b: 'x');
+                    }
+                }
+                PHP,
+        ]);
+
+        $matches = $locator->parameter('App\\Mailer', 'send', 'b', 1);
+
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_DECLARATION, Param::class));
+        self::assertSame(1, $this->countMatches($matches, VirtualPhpSourceFileNodeMatchRole::PARAMETER_USAGE, Arg::class));
+        self::assertSame(1, $this->firstParameterDeclarationIndex($matches));
+
+        foreach ($matches as $match) {
+            self::assertSame(1, $match->target->parameterId?->parameterIndex);
+        }
+    }
+
+    /**
      * Ensures real factory builds expose class-like owner declarations and usages.
      */
     public function testFactoryBuildSourceNodeIdsDriveStrictOwnerLookup(): void
@@ -502,6 +697,70 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
                 }
             }
             PHP);
+    }
+
+    /**
+     * Creates a source-node locator from fixture sources.
+     *
+     * @param array<string, string> $sources the source code indexed by relative file name
+     */
+    private function createLocatorFromSources(array $sources): MemberGraphSourceNodeLocator
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+
+        mkdir($srcDirectory, 0o777, true);
+
+        foreach ($sources as $relativeFilePath => $source) {
+            file_put_contents($srcDirectory.'/'.$relativeFilePath, $source);
+        }
+
+        return MemberGraphSourceNodeLocator::fromBuild(
+            MemberDependencyGraphFactory::fromDirectory(
+                directories: [$srcDirectory],
+                cacheFilePath: $cacheFilePath,
+            ),
+        );
+    }
+
+    /**
+     * Returns the index of the first parameter declaration match.
+     *
+     * @param VirtualPhpSourceFileNodeMatchCollection $matches the match collection
+     */
+    private function firstParameterDeclarationIndex(VirtualPhpSourceFileNodeMatchCollection $matches): ?int
+    {
+        foreach ($matches->parameterDeclarations() as $match) {
+            if (!$match->node instanceof Param) {
+                continue;
+            }
+
+            return $this->parameterDeclarationIndex($match->node);
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolves a parameter declaration index from its parent signature.
+     *
+     * @param Param $parameter the parameter node
+     */
+    private function parameterDeclarationIndex(Param $parameter): ?int
+    {
+        $parent = $parameter->getAttribute('parent');
+
+        if (!$parent instanceof ClassMethod && !$parent instanceof Function_) {
+            return null;
+        }
+
+        foreach ($parent->params as $index => $candidate) {
+            if ($candidate === $parameter) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     /**

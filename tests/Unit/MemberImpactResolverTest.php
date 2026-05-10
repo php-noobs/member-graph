@@ -123,6 +123,35 @@ final class MemberImpactResolverTest extends TestCase
     }
 
     /**
+     * Ensures indexed parameter targets keep exact identity while still resolving name-scoped named arguments.
+     */
+    public function testItResolvesIndexedParameterImpactFromNameScopedUsages(): void
+    {
+        $nameScopedTarget = new ParameterId('App\\Mailer', 'send', 'message');
+        $indexedTarget = new ParameterId('App\\Mailer', 'send', 'message', 1);
+        $graph = $this->createGraph(
+            parameterUsages: [
+                new ParameterUsage(
+                    sourceSymbol: 'App\\Runner::run',
+                    target: $nameScopedTarget,
+                    type: ParameterUsageType::NAMED_ARGUMENT,
+                    file: 'src/Runner.php',
+                ),
+            ],
+        );
+
+        $impact = new MemberImpactResolver()->resolve(
+            $graph,
+            MemberImpactTarget::parameter('App\\Mailer', 'send', 'message', 1),
+        );
+
+        self::assertNotSame($nameScopedTarget->hash(), $indexedTarget->hash());
+        self::assertSame($nameScopedTarget->hash(), $indexedTarget->nameHash());
+        self::assertCount(1, $impact->parameterUsages->getByTarget($indexedTarget));
+        self::assertTrue($impact->impactedFiles->contains('src/Runner.php'));
+    }
+
+    /**
      * Creates a member dependency graph for impact resolver tests.
      *
      * @param list<MemberDeclaration> $declarations    the declarations to add
