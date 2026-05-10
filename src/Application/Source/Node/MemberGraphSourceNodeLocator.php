@@ -48,6 +48,7 @@ use PhpParser\Node\VarLikeIdentifier;
 final readonly class MemberGraphSourceNodeLocator
 {
     private ParameterLocalUsageNodeLocator $parameterLocalUsageNodeLocator;
+    private ParameterScopeNodeLocator $parameterScopeNodeLocator;
 
     /**
      * Constructor.
@@ -60,6 +61,7 @@ final readonly class MemberGraphSourceNodeLocator
         private bool $allowFallbackMatching = false,
     ) {
         $this->parameterLocalUsageNodeLocator = new ParameterLocalUsageNodeLocator();
+        $this->parameterScopeNodeLocator = new ParameterScopeNodeLocator();
     }
 
     /**
@@ -144,10 +146,10 @@ final readonly class MemberGraphSourceNodeLocator
     /**
      * Locates source nodes for one parameter target.
      *
-     * @param string $owner            the owner FQCN, or an empty string for functions
-     * @param string $functionLikeName the method name or fully-qualified function name
-     * @param string $parameterName    the parameter name without "$"
-     * @param int|null $parameterIndex the optional zero-based declaration index
+     * @param string   $owner            the owner FQCN, or an empty string for functions
+     * @param string   $functionLikeName the method name or fully-qualified function name
+     * @param string   $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
      */
     public function parameter(
         string $owner,
@@ -173,6 +175,62 @@ final readonly class MemberGraphSourceNodeLocator
         int $parameterIndex,
     ): VirtualPhpSourceFileNodeMatchCollection {
         return $this->parameter($owner, $functionLikeName, $parameterName, $parameterIndex);
+    }
+
+    /**
+     * Locates neutral source facts around one targeted parameter declaring scope.
+     *
+     * @param string   $owner            the owner FQCN, or an empty string for functions
+     * @param string   $functionLikeName the method name or fully-qualified function name
+     * @param string   $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
+     */
+    public function parameterScope(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        ?int $parameterIndex = null,
+    ): MemberGraphParameterScope {
+        $target = MemberImpactTarget::parameter($owner, $functionLikeName, $parameterName, $parameterIndex);
+        $parameterMatches = $this->target($target);
+        $scopeMatches = new VirtualPhpSourceFileNodeMatchCollection();
+
+        foreach ($parameterMatches->parameterDeclarations() as $parameterDeclaration) {
+            if (!$parameterDeclaration->node instanceof Param) {
+                continue;
+            }
+
+            $functionLike = $this->declaringFunctionLike($parameterDeclaration->node);
+
+            if (null === $functionLike) {
+                continue;
+            }
+
+            $this->matchParameterScopeNodes($functionLike, $parameterDeclaration->virtualFile, $target, $scopeMatches);
+        }
+
+        foreach ($parameterMatches->parameterLocalUsages() as $localUsage) {
+            $scopeMatches->add($localUsage);
+        }
+
+        return new MemberGraphParameterScope($scopeMatches);
+    }
+
+    /**
+     * Locates neutral source facts around one targeted parameter declaring scope at a specific declaration index.
+     *
+     * @param string $owner            the owner FQCN, or an empty string for functions
+     * @param string $functionLikeName the method name or fully-qualified function name
+     * @param string $parameterName    the parameter name without "$"
+     * @param int    $parameterIndex   the zero-based declaration index
+     */
+    public function parameterScopeAt(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        int $parameterIndex,
+    ): MemberGraphParameterScope {
+        return $this->parameterScope($owner, $functionLikeName, $parameterName, $parameterIndex);
     }
 
     /**
@@ -679,10 +737,10 @@ final readonly class MemberGraphSourceNodeLocator
      * Matches local variable usages for one parameter declaration.
      *
      * @param Param                                   $parameterNode the matched parameter declaration node
-     * @param VirtualPhpSourceFile                    $virtualFile    the virtual file containing the node
-     * @param MemberImpactTarget                      $target         the original impact target
-     * @param ParameterId                             $parameterId    the parameter identifier
-     * @param VirtualPhpSourceFileNodeMatchCollection $matches        the output match collection
+     * @param VirtualPhpSourceFile                    $virtualFile   the virtual file containing the node
+     * @param MemberImpactTarget                      $target        the original impact target
+     * @param ParameterId                             $parameterId   the parameter identifier
+     * @param VirtualPhpSourceFileNodeMatchCollection $matches       the output match collection
      */
     private function matchParameterLocalUsageNodes(
         Param $parameterNode,
@@ -703,6 +761,39 @@ final readonly class MemberGraphSourceNodeLocator
                 node: $usageNode,
                 target: $target,
                 role: VirtualPhpSourceFileNodeMatchRole::PARAMETER_LOCAL_USAGE,
+            ));
+        }
+    }
+
+    /**
+     * Matches same-signature parameters and local variables for one parameter declaring scope.
+     *
+     * @param ClassMethod|Function_                   $functionLike the function-like declaration to inspect
+     * @param VirtualPhpSourceFile                    $virtualFile  the virtual file containing the declaration
+     * @param MemberImpactTarget                      $target       the original impact target
+     * @param VirtualPhpSourceFileNodeMatchCollection $matches      the output match collection
+     */
+    private function matchParameterScopeNodes(
+        ClassMethod|Function_ $functionLike,
+        VirtualPhpSourceFile $virtualFile,
+        MemberImpactTarget $target,
+        VirtualPhpSourceFileNodeMatchCollection $matches,
+    ): void {
+        foreach ($functionLike->params as $parameter) {
+            $matches->add(new VirtualPhpSourceFileNodeMatch(
+                virtualFile: $virtualFile,
+                node: $parameter,
+                target: $target,
+                role: VirtualPhpSourceFileNodeMatchRole::PARAMETER_SCOPE_PARAMETER,
+            ));
+        }
+
+        foreach ($this->parameterScopeNodeLocator->localVariables($functionLike) as $localVariable) {
+            $matches->add(new VirtualPhpSourceFileNodeMatch(
+                virtualFile: $virtualFile,
+                node: $localVariable,
+                target: $target,
+                role: VirtualPhpSourceFileNodeMatchRole::PARAMETER_SCOPE_LOCAL_VARIABLE,
             ));
         }
     }

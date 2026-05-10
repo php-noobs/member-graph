@@ -134,10 +134,10 @@ final readonly class MemberGraphImpactService
     /**
      * Resolves impact information for one parameter.
      *
-     * @param string $owner            the owner FQCN, or an empty string for functions
-     * @param string $functionLikeName the method name or fully-qualified function name
-     * @param string $parameterName    the parameter name without "$"
-     * @param int|null $parameterIndex the optional zero-based declaration index
+     * @param string   $owner            the owner FQCN, or an empty string for functions
+     * @param string   $functionLikeName the method name or fully-qualified function name
+     * @param string   $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
      */
     public function parameter(
         string $owner,

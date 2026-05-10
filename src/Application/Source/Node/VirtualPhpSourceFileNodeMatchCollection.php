@@ -6,6 +6,8 @@ namespace PhpNoobs\MemberGraph\Application\Source\Node;
 
 use PhpNoobs\PhpSource\VirtualPhpSourceFileCollection;
 use PhpParser\Node;
+use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Param;
 
 /**
  * Collects source node matches found in virtual registry files.
@@ -116,6 +118,38 @@ final class VirtualPhpSourceFileNodeMatchCollection implements \Countable, \Iter
     }
 
     /**
+     * Returns matches declaring parameters in the same signature as a targeted parameter.
+     */
+    public function parameterScopeParameters(): self
+    {
+        return $this->byRole(VirtualPhpSourceFileNodeMatchRole::PARAMETER_SCOPE_PARAMETER);
+    }
+
+    /**
+     * Returns matches declaring or assigning local variables in the same body as a targeted parameter.
+     */
+    public function parameterScopeLocalVariables(): self
+    {
+        return $this->byRole(VirtualPhpSourceFileNodeMatchRole::PARAMETER_SCOPE_LOCAL_VARIABLE);
+    }
+
+    /**
+     * Indicates whether the collection contains a node with the given variable-like name.
+     *
+     * @param string $name the name to find without the leading "$"
+     */
+    public function hasName(string $name): bool
+    {
+        foreach ($this->matches as $match) {
+            if ($this->nodeName($match->node) === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Returns matches contained in one virtual file.
      *
      * @param string $virtualFilePath the virtual file path to keep
@@ -211,5 +245,23 @@ final class VirtualPhpSourceFileNodeMatchCollection implements \Countable, \Iter
     public function count(): int
     {
         return count($this->matches);
+    }
+
+    /**
+     * Returns the variable-like name represented by one supported node.
+     *
+     * @param Node $node the node to inspect
+     */
+    private function nodeName(Node $node): ?string
+    {
+        if ($node instanceof Param && $node->var instanceof Variable && is_string($node->var->name)) {
+            return $node->var->name;
+        }
+
+        if ($node instanceof Variable && is_string($node->name)) {
+            return $node->name;
+        }
+
+        return null;
     }
 }

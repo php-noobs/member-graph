@@ -147,6 +147,7 @@ $locator->function('App\\send_mail');
 $locator->parameter('App\\Mailer', 'send', 'message');
 $locator->parameter('App\\Mailer', 'send', 'message', 0);
 $locator->parameterAt('App\\Mailer', 'send', 'message', 0);
+$locator->parameterScope('App\\Mailer', 'send', 'message', 0);
 $locator->owner('App\\Mailer');
 ```
 
@@ -172,7 +173,7 @@ $sourceFiles = $matches->virtualFiles();
 $nodes = $matches->nodes();
 ```
 
-Available filters are `byRole()`, `ownerDeclarations()`, `ownerUsages()`, `memberDeclarations()`, `memberUsages()`, `parameterDeclarations()`, `parameterUsages()`, `byVirtualFilePath()`, and `byNodeClass()`.
+Available filters are `byRole()`, `ownerDeclarations()`, `ownerUsages()`, `memberDeclarations()`, `memberUsages()`, `parameterDeclarations()`, `parameterUsages()`, `parameterLocalUsages()`, `parameterScopeParameters()`, `parameterScopeLocalVariables()`, `byVirtualFilePath()`, `byNodeClass()`, and `hasName()`.
 
 Match roles are intentionally split between owners, members, and parameters.
 Owners are class-like symbols such as classes, interfaces, traits, and enums.
@@ -184,7 +185,10 @@ Parameters are the named inputs of a method, closure, or function and are tracke
 - `MEMBER_DECLARATION`: the node declares a graph member, such as a method, property, class constant, enum case, or function. A promoted-property `Param` is a member declaration when it declares the property member;
 - `MEMBER_USAGE`: the node uses a graph member, such as a method call, property fetch, class-constant fetch, or function call;
 - `PARAMETER_DECLARATION`: the `Param` node declares the target parameter on a method, closure, or function;
-- `PARAMETER_USAGE`: the node uses the target parameter through a named argument.
+- `PARAMETER_USAGE`: the node uses the target parameter through a named argument;
+- `PARAMETER_LOCAL_USAGE`: the `Variable` node uses the target parameter inside its declaring body;
+- `PARAMETER_SCOPE_PARAMETER`: the `Param` node declares one parameter in the same signature as the target parameter;
+- `PARAMETER_SCOPE_LOCAL_VARIABLE`: the `Variable` node declares or assigns one local variable in the same body as the target parameter.
 
 The locator does not rebuild the graph and does not scan the full codebase.
 It first asks the impact service for impacted virtual files, then re-traverses only those ASTs.
@@ -208,6 +212,39 @@ The index is part of the `ParameterId` identity used by impact targets, so index
 This allows rename tooling to target one parameter during temporary swap states where two parameters may currently have the same name.
 Named-argument `PARAMETER_USAGE` matches remain graph-driven and continue to be returned through the name-scoped parameter lookup when the graph can relate them to the targeted parameter name.
 Local `PARAMETER_LOCAL_USAGE` matches are source-level facts for refactoring tools; nested closures and arrow functions are inspected only when they can refer to the outer parameter without shadowing it.
+
+Parameter scope lookup exposes broader neutral facts around the exact matched declaration:
+
+```php
+$scope = $locator->parameterScope('App\\Mailer', 'send', 'message', 0);
+
+$scope->parameters();
+$scope->localVariables();
+$scope->parameterLocalUsages();
+```
+
+`parameters()` returns every `Param` in the same signature.
+`localVariables()` returns local assignment variables in the declaring body and conservatively skips independent nested closure and arrow-function scopes.
+`parameterLocalUsages()` returns the existing local usages of the targeted parameter.
+These facts are intended for callers that need to evaluate their own policies; MemberGraph does not classify them as conflicts.
+
+For broader symbol scopes, use `MemberGraphSymbolScopeLocator`:
+
+```php
+$scopeLocator = MemberGraphSymbolScopeLocator::fromBuild($build);
+
+$scopeLocator->methodScope('App\\Mailer', 'send')->methodDeclarations();
+$scopeLocator->propertyScope('App\\Mailer', 'transport')->propertyDeclarations();
+$scopeLocator->classConstantScope('App\\Status', 'ACTIVE')->classConstantDeclarations();
+$scopeLocator->classLikeNamespaceScope('App\\Domain')->classLikeDeclarations();
+$scopeLocator->functionNamespaceScope('App\\Domain')->functionDeclarations();
+$scopeLocator->fileImportScope($virtualFile)->classLikeImports();
+```
+
+Each `MemberGraphSymbolScopeFact` exposes the `virtualFile`, exact PHPParser `node`, neutral `role`, `name`, optional `fqcn`, optional `shortName`, and optional import `alias`.
+Owner scopes are projected from `AvailableMember`, then resolved back to source declarations when possible.
+This includes declared, inherited, interface, trait, and trait-alias members already represented by the available-member projection.
+Namespace and import scopes are source-level and computed from loaded virtual files.
 
 This API does not mutate code.
 It only provides source-level facts a higher-level tool may inspect.

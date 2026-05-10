@@ -87,10 +87,10 @@ final readonly class MemberImpactTarget
     /**
      * Creates a parameter impact target.
      *
-     * @param string $owner            the owner FQCN, or an empty string for functions
-     * @param string $functionLikeName the method name or fully-qualified function name
-     * @param string $parameterName    the parameter name without "$"
-     * @param int|null $parameterIndex the optional zero-based declaration index
+     * @param string   $owner            the owner FQCN, or an empty string for functions
+     * @param string   $functionLikeName the method name or fully-qualified function name
+     * @param string   $parameterName    the parameter name without "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
      */
     public static function parameter(
         string $owner,

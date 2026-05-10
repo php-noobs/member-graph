@@ -56,6 +56,7 @@ $locator = MemberGraphSourceNodeLocator::fromBuild($build);
 
 $matches = $locator->method('App\\Service\\UserService', 'send');
 $parameterMatches = $locator->parameter('App\\Service\\UserService', 'send', 'message', 0);
+$parameterScope = $locator->parameterScope('App\\Service\\UserService', 'send', 'message', 0);
 $ownerMatches = $locator->owner('App\\Service\\UserService');
 ```
 
@@ -65,6 +66,25 @@ Parameter lookup accepts an optional zero-based declaration index so refactoring
 That index is carried by the underlying `ParameterId`; indexed targets have an exact indexed hash, while named-argument usages remain discoverable through the compatible name-scoped lookup.
 Parameter lookup also returns `PARAMETER_LOCAL_USAGE` matches for local `Variable` nodes inside the declaring body.
 Those matches are computed on demand from the already loaded AST and are not persisted in the graph cache.
+Use `parameterScope()` when a caller needs neutral facts about the declaring scope: same-signature `Param` nodes, assigned local `Variable` nodes, and targeted parameter local usages.
+MemberGraph exposes those facts without deciding whether they are rename conflicts.
+
+## Symbol Scopes
+
+Use `MemberGraphSymbolScopeLocator` to inspect neutral symbol facts around declarations, namespaces, and imports:
+
+```php
+$scopeLocator = MemberGraphSymbolScopeLocator::fromBuild($build);
+
+$methodScope = $scopeLocator->methodScope('App\\Mailer', 'send');
+$propertyScope = $scopeLocator->propertyScope('App\\Mailer', 'transport');
+$constantScope = $scopeLocator->classConstantScope('App\\Status', 'ACTIVE');
+$classLikeScope = $scopeLocator->classLikeNamespaceScope('App\\Domain');
+$functionScope = $scopeLocator->functionNamespaceScope('App\\Domain');
+$importScope = $scopeLocator->fileImportScope($virtualFile);
+```
+
+The scope locator returns facts, not decisions. Callers can inspect names, short names, aliases, exact nodes, and virtual files, then apply their own policy.
 
 ## Topology
 

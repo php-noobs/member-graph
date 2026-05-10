@@ -392,6 +392,136 @@ final class MemberGraphSourceNodeLocatorIntegrationTest extends TestCase
     }
 
     /**
+     * Ensures method parameter scope exposes same-signature parameters and assigned local variables.
+     */
+    public function testFactoryBuildLocatesMethodParameterScopeFacts(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $message, string $subject): void
+                    {
+                        $data = trim($message);
+                        $normalized = strtoupper($subject);
+                    }
+                }
+                PHP,
+        ]);
+
+        $scope = $locator->parameterScope('App\\Mailer', 'send', 'message', 0);
+
+        self::assertCount(2, $scope->parameters());
+        self::assertTrue($scope->parameters()->hasName('message'));
+        self::assertTrue($scope->parameters()->hasName('subject'));
+        self::assertCount(2, $scope->localVariables());
+        self::assertTrue($scope->localVariables()->hasName('data'));
+        self::assertTrue($scope->localVariables()->hasName('normalized'));
+        self::assertCount(1, $scope->parameterLocalUsages());
+    }
+
+    /**
+     * Ensures function parameter scope exposes same-signature parameters and assigned local variables.
+     */
+    public function testFactoryBuildLocatesFunctionParameterScopeFacts(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'functions.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                function send_mail(string $message, string $subject): void
+                {
+                    $data = trim($message);
+                    $normalized = strtoupper($subject);
+                }
+                PHP,
+        ]);
+
+        $scope = $locator->parameterScope('', 'App\\send_mail', 'message');
+
+        self::assertCount(2, $scope->parameters());
+        self::assertTrue($scope->parameters()->hasName('message'));
+        self::assertTrue($scope->parameters()->hasName('subject'));
+        self::assertCount(2, $scope->localVariables());
+        self::assertTrue($scope->localVariables()->hasName('data'));
+        self::assertTrue($scope->localVariables()->hasName('normalized'));
+        self::assertCount(1, $scope->parameterLocalUsages());
+    }
+
+    /**
+     * Ensures indexed parameter scope is attached only to the exact matched declaration.
+     */
+    public function testFactoryBuildLocatesParameterScopeWithExactIndex(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $a, string $b): void
+                    {
+                        $data = $b;
+                    }
+                }
+                PHP,
+        ]);
+
+        $exactScope = $locator->parameterScopeAt('App\\Mailer', 'send', 'b', 1);
+        $wrongIndexScope = $locator->parameterScopeAt('App\\Mailer', 'send', 'b', 0);
+
+        self::assertCount(2, $exactScope->parameters());
+        self::assertTrue($exactScope->parameters()->hasName('a'));
+        self::assertTrue($exactScope->parameters()->hasName('b'));
+        self::assertCount(1, $exactScope->localVariables());
+        self::assertTrue($exactScope->localVariables()->hasName('data'));
+        self::assertCount(0, $wrongIndexScope->matches());
+    }
+
+    /**
+     * Ensures parameter scope local variables ignore nested closure and arrow-function scopes.
+     */
+    public function testFactoryBuildLocatesParameterScopeWithoutNestedLocalVariables(): void
+    {
+        $locator = $this->createLocatorFromSources([
+            'Mailer.php' => <<<'PHP'
+                <?php
+
+                namespace App;
+
+                final class Mailer
+                {
+                    public function send(string $message): void
+                    {
+                        $data = trim($message);
+                        $closure = static function () use ($message): void {
+                            $nestedData = $message;
+                        };
+                        $arrow = static fn (): string => $message;
+                    }
+                }
+                PHP,
+        ]);
+
+        $scope = $locator->parameterScope('App\\Mailer', 'send', 'message');
+
+        self::assertCount(1, $scope->parameters());
+        self::assertCount(3, $scope->localVariables());
+        self::assertTrue($scope->localVariables()->hasName('data'));
+        self::assertTrue($scope->localVariables()->hasName('closure'));
+        self::assertTrue($scope->localVariables()->hasName('arrow'));
+        self::assertFalse($scope->localVariables()->hasName('nestedData'));
+    }
+
+    /**
      * Ensures real factory builds expose class-like owner declarations and usages.
      */
     public function testFactoryBuildSourceNodeIdsDriveStrictOwnerLookup(): void

@@ -47,4 +47,14 @@ enum VirtualPhpSourceFileNodeMatchRole
      * The node uses a function-like parameter as a local variable inside its declaring body.
      */
     case PARAMETER_LOCAL_USAGE;
+
+    /**
+     * The node declares one parameter in the same function-like signature as a targeted parameter.
+     */
+    case PARAMETER_SCOPE_PARAMETER;
+
+    /**
+     * The node declares or assigns one local variable in the same function-like body as a targeted parameter.
+     */
+    case PARAMETER_SCOPE_LOCAL_VARIABLE;
 }

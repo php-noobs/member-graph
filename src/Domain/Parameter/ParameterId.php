@@ -13,10 +13,10 @@ namespace PhpNoobs\MemberGraph\Domain\Parameter;
 final readonly class ParameterId
 {
     /**
-     * @param string $owner            The owner FQCN. Empty string for functions.
-     * @param string $functionLikeName the method name or fully-qualified function name
-     * @param string $parameterName    the parameter name without the leading "$"
-     * @param int|null $parameterIndex the optional zero-based declaration index
+     * @param string   $owner            The owner FQCN. Empty string for functions.
+     * @param string   $functionLikeName the method name or fully-qualified function name
+     * @param string   $parameterName    the parameter name without the leading "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
      */
     public function __construct(
         public string $owner,
