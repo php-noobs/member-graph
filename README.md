@@ -94,6 +94,21 @@ $build = MemberDependencyGraphFactory::fromVirtualFiles($build->virtualFiles);
 
 This path does not scan directories, read physical files, or write the persistent cache.
 
+For supported transaction identity updates, project a build without a full AST rebuild:
+
+```php
+use PhpNoobs\MemberGraph\Application\Build\Projection\MemberGraphBuildOverlay;
+use PhpNoobs\MemberGraph\Application\Build\Projection\MemberGraphProjectedBuildFactory;
+
+$overlay = MemberGraphBuildOverlay::empty()
+    ->withOwnerUpdate('App\\Mailer', 'App\\Infrastructure\\Sender')
+    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver');
+
+$build = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
+```
+
+The projected build is a normal `MemberDependencyGraphBuild` for the supported update families.
+
 ## Query Usage
 
 ```php

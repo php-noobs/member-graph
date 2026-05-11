@@ -61,6 +61,27 @@ This rebuild does not scan directories, does not read physical files, and does n
 
 If a virtual file reports `isUpdated()`, the factory refreshes structural PHPParser attributes before recomputing known owners and rebuilding the graph.
 
+## Projected Build
+
+When a transaction only applies supported semantic identity updates, callers can project a build instead of rebuilding from all virtual-file ASTs:
+
+```php
+$overlay = MemberGraphBuildOverlay::empty()
+    ->withOwnerUpdate('App\\Mailer', 'App\\Infrastructure\\Sender')
+    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver');
+
+$build = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
+```
+
+The projected build is a normal `MemberDependencyGraphBuild`.
+It preserves virtual files, PHPParser nodes, source-node identifiers, and file paths while projecting graph identities.
+
+The first supported slice covers owner FQCN updates, method updates, and chained owner + method updates.
+The method update can be expressed against the current projected owner identity.
+
+The projection does not mutate source, does not write files, does not refresh cache, and does not implement refactoring policy.
+If a transaction action is not covered by the projection slice, use `MemberDependencyGraphFactory::fromVirtualFiles()` to rebuild a fully fresh in-memory graph.
+
 ## Builder Input
 
 `MemberDependencyGraphBuilder` remains the lower-level build orchestrator.

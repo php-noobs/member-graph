@@ -74,6 +74,7 @@ MemberGraph/
         Loading/
         SourceView/
         WorkingSet/
+      Projection/
       Source/
     Cache/
       Core/
@@ -125,6 +126,7 @@ The general rule is:
 - `Application/Build/Factory/` contains the public factory entry point, build DTOs, modes, rebuild planning DTOs, and build-mode runners.
 - `Application/Build/GlobalIndexRebuild/` contains cache-backed source metadata and global-index rebuild input services.
 - `Application/Build/PartialGraph/` contains partial graph rebuild assembly, diagnostics, execution, input, loading, source-view, and working-set services.
+- `Application/Build/Projection/` contains policy-free projected-build services for supported semantic identity updates.
 - `Application/Cache/` contains cache storage, planning, fragments, fingerprints, virtual-file metadata, and cacheable snapshots.
 - `Application/Resolver/` contains expression resolver contracts, expression strategies, and shared resolver services.
 - `Application/Impact/`, `Application/Query/`, `Application/Source/`, and `Application/Topology/` expose impact resolution, read/query services, source-node lookup, and bounded topology projections over the graph.
