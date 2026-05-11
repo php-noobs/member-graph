@@ -102,7 +102,8 @@ use PhpNoobs\MemberGraph\Application\Build\Projection\MemberGraphProjectedBuildF
 
 $overlay = MemberGraphBuildOverlay::empty()
     ->withOwnerUpdate('App\\Mailer', 'App\\Infrastructure\\Sender')
-    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver');
+    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver')
+    ->withParameterUpdate('App\\Infrastructure\\Sender', 'deliver', 'message', 'emailMessage', 0);
 
 $build = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
 ```

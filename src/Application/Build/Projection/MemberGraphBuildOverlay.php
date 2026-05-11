@@ -14,12 +14,14 @@ final readonly class MemberGraphBuildOverlay
     /**
      * Constructor.
      *
-     * @param list<MemberGraphOwnerIdentityUpdate>  $ownerUpdates  the owner identity updates
-     * @param list<MemberGraphMemberIdentityUpdate> $memberUpdates the member identity updates
+     * @param list<MemberGraphOwnerIdentityUpdate>     $ownerUpdates     the owner identity updates
+     * @param list<MemberGraphMemberIdentityUpdate>    $memberUpdates    the member identity updates
+     * @param list<MemberGraphParameterIdentityUpdate> $parameterUpdates the parameter identity updates
      */
     private function __construct(
         private array $ownerUpdates = [],
         private array $memberUpdates = [],
+        private array $parameterUpdates = [],
     ) {
     }
 
@@ -45,6 +47,7 @@ final readonly class MemberGraphBuildOverlay
                 new MemberGraphOwnerIdentityUpdate($owner, $newOwner),
             ],
             memberUpdates: $this->memberUpdates,
+            parameterUpdates: $this->parameterUpdates,
         );
     }
 
@@ -67,6 +70,39 @@ final readonly class MemberGraphBuildOverlay
             memberUpdates: [
                 ...$this->memberUpdates,
                 new MemberGraphMemberIdentityUpdate($type, $owner, $name, $newName),
+            ],
+            parameterUpdates: $this->parameterUpdates,
+        );
+    }
+
+    /**
+     * Returns a copy with one parameter identity update.
+     *
+     * @param string   $owner            the current owner identity, or an empty string for functions
+     * @param string   $functionLikeName the current method name or function FQCN
+     * @param string   $parameterName    the current parameter name without "$"
+     * @param string   $newParameterName the projected parameter name without "$"
+     * @param int|null $parameterIndex   the optional zero-based declaration index
+     */
+    public function withParameterUpdate(
+        string $owner,
+        string $functionLikeName,
+        string $parameterName,
+        string $newParameterName,
+        ?int $parameterIndex = null,
+    ): self {
+        return new self(
+            ownerUpdates: $this->ownerUpdates,
+            memberUpdates: $this->memberUpdates,
+            parameterUpdates: [
+                ...$this->parameterUpdates,
+                new MemberGraphParameterIdentityUpdate(
+                    owner: $owner,
+                    functionLikeName: $functionLikeName,
+                    parameterName: $parameterName,
+                    newParameterName: $newParameterName,
+                    parameterIndex: $parameterIndex,
+                ),
             ],
         );
     }
@@ -159,5 +195,15 @@ final readonly class MemberGraphBuildOverlay
     public function memberUpdates(): array
     {
         return $this->memberUpdates;
+    }
+
+    /**
+     * Returns recorded parameter identity updates.
+     *
+     * @return list<MemberGraphParameterIdentityUpdate>
+     */
+    public function parameterUpdates(): array
+    {
+        return $this->parameterUpdates;
     }
 }

@@ -68,7 +68,9 @@ When a transaction only applies supported semantic identity updates, callers can
 ```php
 $overlay = MemberGraphBuildOverlay::empty()
     ->withOwnerUpdate('App\\Mailer', 'App\\Infrastructure\\Sender')
-    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver');
+    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver')
+    ->withPropertyUpdate('App\\Infrastructure\\Sender', 'transport', 'mailerTransport')
+    ->withParameterUpdate('App\\Infrastructure\\Sender', 'deliver', 'message', 'emailMessage', 0);
 
 $build = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
 ```
@@ -76,8 +78,8 @@ $build = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
 The projected build is a normal `MemberDependencyGraphBuild`.
 It preserves virtual files, PHPParser nodes, source-node identifiers, and file paths while projecting graph identities.
 
-The first supported slice covers owner FQCN updates, method updates, and chained owner + method updates.
-The method update can be expressed against the current projected owner identity.
+Supported projections cover owner FQCN updates, method updates, property updates, class-constant updates, enum-case updates, function FQCN updates, namespace-level constant FQCN updates, and parameter updates with an optional declaration index.
+Member and parameter updates can be expressed against current projected owner/function-like identities.
 
 The projection does not mutate source, does not write files, does not refresh cache, and does not implement refactoring policy.
 If a transaction action is not covered by the projection slice, use `MemberDependencyGraphFactory::fromVirtualFiles()` to rebuild a fully fresh in-memory graph.

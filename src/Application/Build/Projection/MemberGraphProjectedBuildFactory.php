@@ -21,13 +21,13 @@ use PhpNoobs\MemberGraph\Domain\Owner\OwnerDeclaration;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerDeclarationCollection;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerUsage;
 use PhpNoobs\MemberGraph\Domain\Owner\OwnerUsageCollection;
-use PhpNoobs\MemberGraph\Domain\Parameter\ParameterId;
 use PhpNoobs\MemberGraph\Domain\Parameter\ParameterUsage;
 use PhpNoobs\MemberGraph\Domain\Parameter\ParameterUsageCollection;
 use PhpNoobs\MemberGraph\Domain\Type\TraitAliasAdaptation;
 use PhpNoobs\MemberGraph\Domain\Type\TraitInsteadOfAdaptation;
 use PhpNoobs\MemberGraph\Domain\Usage\MemberUsage;
 use PhpNoobs\MemberGraph\Domain\Usage\MemberUsageCollection;
+use PhpNoobs\MemberGraph\Infrastructure\PhpParser\Indexing\StructuralNodeIndexBuilder;
 
 /**
  * Builds projected member dependency graph builds from semantic identity updates.
@@ -57,6 +57,8 @@ final readonly class MemberGraphProjectedBuildFactory
         MemberDependencyGraphBuild $build,
         MemberGraphBuildOverlay $overlay,
     ): MemberDependencyGraphBuild {
+        $this->refreshUpdatedVirtualFiles($build);
+
         $projectionMap = new MemberGraphProjectionMap($overlay);
 
         $this->recordSemanticMemberFamilies($build->memberDependencyGraph, $overlay, $projectionMap);
@@ -84,6 +86,24 @@ final readonly class MemberGraphProjectedBuildFactory
             dependencyGraphIssues: $build->dependencyGraphIssues,
             buildReport: $build->buildReport,
         );
+    }
+
+    /**
+     * Refreshes parser structural attributes for virtual files that were updated by the caller.
+     *
+     * @param MemberDependencyGraphBuild $build the build carrying virtual files
+     */
+    private function refreshUpdatedVirtualFiles(MemberDependencyGraphBuild $build): void
+    {
+        $structuralNodeIndexBuilder = new StructuralNodeIndexBuilder();
+
+        foreach ($build->virtualFiles as $virtualFile) {
+            if (!$virtualFile->isUpdated()) {
+                continue;
+            }
+
+            $structuralNodeIndexBuilder->build(array_values($virtualFile->getAst()));
+        }
     }
 
     /**
@@ -261,20 +281,9 @@ final readonly class MemberGraphProjectedBuildFactory
 
         foreach ($usages as $usagesByTarget) {
             foreach ($usagesByTarget as $usage) {
-                $projectedFunctionLikeMember = $projectionMap->projectedMember(new MemberId(
-                    owner: $usage->target->owner,
-                    name: $usage->target->functionLikeName,
-                    type: MemberType::METHOD,
-                ));
-
                 $projectedUsages->add(new ParameterUsage(
                     sourceSymbol: $projectionMap->projectedSourceSymbol($usage->sourceSymbol),
-                    target: new ParameterId(
-                        owner: $projectionMap->projectedOwner($usage->target->owner),
-                        functionLikeName: $projectedFunctionLikeMember->name,
-                        parameterName: $usage->target->parameterName,
-                        parameterIndex: $usage->target->parameterIndex,
-                    ),
+                    target: $projectionMap->projectedParameter($usage->target),
                     type: $usage->type,
                     file: $usage->file,
                     sourceNodeId: $usage->sourceNodeId,

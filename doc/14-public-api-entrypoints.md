@@ -44,13 +44,16 @@ Use `MemberGraphProjectedBuildFactory` when the caller only needs supported sema
 ```php
 $overlay = MemberGraphBuildOverlay::empty()
     ->withOwnerUpdate('App\\Mailer', 'App\\Infrastructure\\Sender')
-    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver');
+    ->withMethodUpdate('App\\Infrastructure\\Sender', 'send', 'deliver')
+    ->withPropertyUpdate('App\\Infrastructure\\Sender', 'transport', 'mailerTransport')
+    ->withParameterUpdate('App\\Infrastructure\\Sender', 'deliver', 'message', 'emailMessage', 0);
 
 $projectedBuild = MemberGraphProjectedBuildFactory::fromBuild($build, $overlay);
 ```
 
 The projected build is a normal `MemberDependencyGraphBuild`.
-For the first supported slice, projections cover owner FQCN updates, method updates, and chained owner + method updates expressed with the current projected owner identity.
+Supported projections cover owner FQCN updates, method updates, property updates, class-constant updates, enum-case updates, function FQCN updates, namespace-level constant FQCN updates, and parameter updates with an optional declaration index.
+Member and parameter updates can be expressed with current projected owner/function-like identities.
 The projection is policy-free: it does not mutate AST nodes, write files, refresh cache, decide conflicts, or infer refactoring intent.
 Unsupported update families should keep using `MemberDependencyGraphFactory::fromVirtualFiles()`.
 
