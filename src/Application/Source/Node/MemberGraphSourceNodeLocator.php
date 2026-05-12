@@ -33,6 +33,7 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Param;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassConst;
+use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Const_ as ConstStatement;
 use PhpParser\Node\Stmt\Enum_;
@@ -125,6 +126,31 @@ final readonly class MemberGraphSourceNodeLocator
     public function property(string $owner, string $name): VirtualPhpSourceFileNodeMatchCollection
     {
         return $this->target(MemberImpactTarget::property($owner, $name));
+    }
+
+    /**
+     * Locates structural declaration contexts for one or more properties on the same owner.
+     *
+     * This API is additive and does not change the behavior of property().
+     *
+     * @param string              $owner         the property owner FQCN
+     * @param string|list<string> $propertyNames the property name, or property names, to locate
+     */
+    public function propertyDeclarationContext(
+        string $owner,
+        string|array $propertyNames,
+    ): MemberGraphPropertyDeclarationContext {
+        $requestedNames = $this->normalizePropertyNames($propertyNames);
+        $items = new MemberGraphPropertyDeclarationContextItemCollection();
+        $diagnostics = new MemberGraphPropertyDeclarationContextDiagnosticCollection();
+
+        foreach ($requestedNames as $propertyName) {
+            $this->addPropertyDeclarationContextItems($owner, $propertyName, $requestedNames, $items, $diagnostics);
+        }
+
+        $this->addSplitDeclarationDiagnostic($items, $diagnostics);
+
+        return new MemberGraphPropertyDeclarationContext($items, $diagnostics);
     }
 
     /**
@@ -321,6 +347,263 @@ final readonly class MemberGraphSourceNodeLocator
         if (!$virtualFiles->has($virtualFile->virtualFilePath)) {
             $virtualFiles->add($virtualFile);
         }
+    }
+
+    /**
+     * Normalizes requested property names.
+     *
+     * @param string|list<string> $propertyNames the requested property name or names
+     *
+     * @return list<string>
+     */
+    private function normalizePropertyNames(string|array $propertyNames): array
+    {
+        if (is_string($propertyNames)) {
+            return [$propertyNames];
+        }
+
+        return array_values(array_unique($propertyNames));
+    }
+
+    /**
+     * Adds property declaration context items for one requested property.
+     *
+     * @param string                                                    $owner          the property owner FQCN
+     * @param string                                                    $propertyName   the requested property name
+     * @param list<string>                                              $requestedNames all requested property names
+     * @param MemberGraphPropertyDeclarationContextItemCollection       $items          the output items
+     * @param MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics    the output diagnostics
+     */
+    private function addPropertyDeclarationContextItems(
+        string $owner,
+        string $propertyName,
+        array $requestedNames,
+        MemberGraphPropertyDeclarationContextItemCollection $items,
+        MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics,
+    ): void {
+        $matches = $this->property($owner, $propertyName)->memberDeclarations();
+
+        if (0 === count($matches)) {
+            $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+                code: 'PROPERTY_DECLARATION_NOT_FOUND',
+                message: sprintf('Property declaration "%s::$%s" was not found.', $owner, $propertyName),
+            ));
+
+            return;
+        }
+
+        foreach ($matches as $match) {
+            if ($match->node instanceof PropertyProperty) {
+                $this->addGroupedPropertyDeclarationContextItem($match, $requestedNames, $items, $diagnostics);
+
+                continue;
+            }
+
+            if ($match->node instanceof Param) {
+                $this->addPromotedPropertyDeclarationContextItem($match, $items, $diagnostics);
+
+                continue;
+            }
+
+            $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+                code: 'UNSUPPORTED_PROPERTY_DECLARATION_NODE',
+                message: sprintf('Unsupported property declaration node "%s" was found.', $match->node::class),
+            ));
+        }
+    }
+
+    /**
+     * Adds one grouped-property declaration context item.
+     *
+     * @param VirtualPhpSourceFileNodeMatch                             $match          the declaration match
+     * @param list<string>                                              $requestedNames all requested property names
+     * @param MemberGraphPropertyDeclarationContextItemCollection       $items          the output items
+     * @param MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics    the output diagnostics
+     */
+    private function addGroupedPropertyDeclarationContextItem(
+        VirtualPhpSourceFileNodeMatch $match,
+        array $requestedNames,
+        MemberGraphPropertyDeclarationContextItemCollection $items,
+        MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics,
+    ): void {
+        if (!$match->node instanceof PropertyProperty) {
+            return;
+        }
+
+        $propertyProperty = $match->node;
+        $property = $propertyProperty->getAttribute('parent');
+
+        if (!$property instanceof Property) {
+            $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+                code: 'PROPERTY_PARENT_NOT_FOUND',
+                message: sprintf('Property "%s" has no parent property statement.', $propertyProperty->name->toString()),
+            ));
+
+            return;
+        }
+
+        $classLike = $this->parentClassLike($property);
+
+        if (null === $classLike) {
+            $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+                code: 'PROPERTY_CLASS_LIKE_NOT_FOUND',
+                message: sprintf('Property "%s" has no parent class-like statement.', $propertyProperty->name->toString()),
+            ));
+
+            return;
+        }
+
+        $items->add(new MemberGraphPropertyDeclarationContextItem(
+            file: $match->virtualFile,
+            targetNode: $propertyProperty,
+            parentProperty: $property,
+            parentClassLike: $classLike,
+            parentPropertyStatementIndex: $this->propertyStatementIndex($classLike, $property),
+            siblingProperties: array_values($property->props),
+            promoted: false,
+            phpDocOwner: $property,
+            allSiblingsTargeted: $this->allPropertySiblingsTargeted($property, $requestedNames),
+        ));
+    }
+
+    /**
+     * Adds one promoted-property declaration context item.
+     *
+     * @param VirtualPhpSourceFileNodeMatch                             $match       the declaration match
+     * @param MemberGraphPropertyDeclarationContextItemCollection       $items       the output items
+     * @param MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics the output diagnostics
+     */
+    private function addPromotedPropertyDeclarationContextItem(
+        VirtualPhpSourceFileNodeMatch $match,
+        MemberGraphPropertyDeclarationContextItemCollection $items,
+        MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics,
+    ): void {
+        if (!$match->node instanceof Param) {
+            return;
+        }
+
+        $parameter = $match->node;
+        $classLike = $this->parentClassLike($parameter);
+
+        if (null === $classLike) {
+            $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+                code: 'PROMOTED_PROPERTY_CLASS_LIKE_NOT_FOUND',
+                message: 'Promoted property has no parent class-like statement.',
+            ));
+
+            return;
+        }
+
+        $items->add(new MemberGraphPropertyDeclarationContextItem(
+            file: $match->virtualFile,
+            targetNode: $parameter,
+            parentProperty: null,
+            parentClassLike: $classLike,
+            parentPropertyStatementIndex: null,
+            siblingProperties: [],
+            promoted: true,
+            phpDocOwner: $parameter,
+            allSiblingsTargeted: true,
+        ));
+    }
+
+    /**
+     * Adds a diagnostic when requested properties are split across different declarations.
+     *
+     * @param MemberGraphPropertyDeclarationContextItemCollection       $items       the context items
+     * @param MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics the diagnostics to update
+     */
+    private function addSplitDeclarationDiagnostic(
+        MemberGraphPropertyDeclarationContextItemCollection $items,
+        MemberGraphPropertyDeclarationContextDiagnosticCollection $diagnostics,
+    ): void {
+        $declarationIds = [];
+
+        foreach ($items as $item) {
+            $declarationNode = $item->parentProperty ?? $item->targetNode;
+            $declarationIds[spl_object_id($declarationNode)] = true;
+        }
+
+        if (1 >= count($declarationIds)) {
+            return;
+        }
+
+        $diagnostics->add(new MemberGraphPropertyDeclarationContextDiagnostic(
+            code: 'PROPERTIES_SPLIT_ACROSS_DECLARATIONS',
+            message: 'Requested properties are split across different declarations.',
+        ));
+    }
+
+    /**
+     * Returns the parent class-like node for one node.
+     *
+     * @param Node $node the node to inspect
+     */
+    private function parentClassLike(Node $node): ?ClassLike
+    {
+        $current = $node;
+
+        while ($current instanceof Node) {
+            $parent = $current->getAttribute('parent');
+
+            if ($parent instanceof ClassLike) {
+                return $parent;
+            }
+
+            $current = $parent;
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns a property statement index inside its parent class-like statement list.
+     *
+     * @param ClassLike $classLike the parent class-like node
+     * @param Property  $property  the property statement node
+     */
+    private function propertyStatementIndex(ClassLike $classLike, Property $property): ?int
+    {
+        foreach ($this->classLikeStatements($classLike) as $index => $statement) {
+            if ($statement === $property) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns the direct statements of one class-like node.
+     *
+     * @param ClassLike $classLike the class-like node
+     *
+     * @return list<Node>
+     */
+    private function classLikeStatements(ClassLike $classLike): array
+    {
+        $statements = $classLike->stmts ?? [];
+
+        return array_values($statements);
+    }
+
+    /**
+     * Indicates whether every property sibling is part of the current request.
+     *
+     * @param Property     $property       the grouped property statement
+     * @param list<string> $requestedNames all requested property names
+     */
+    private function allPropertySiblingsTargeted(Property $property, array $requestedNames): bool
+    {
+        $requestedNamesByName = array_fill_keys($requestedNames, true);
+
+        foreach ($property->props as $sibling) {
+            if (!isset($requestedNamesByName[$sibling->name->toString()])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -151,6 +151,7 @@ $locator->parameter('App\\Mailer', 'send', 'message');
 $locator->parameter('App\\Mailer', 'send', 'message', 0);
 $locator->parameterAt('App\\Mailer', 'send', 'message', 0);
 $locator->parameterScope('App\\Mailer', 'send', 'message', 0);
+$locator->propertyDeclarationContext('App\\Mailer', ['transport', 'backupTransport']);
 $locator->owner('App\\Mailer');
 ```
 
@@ -231,6 +232,35 @@ $constructorVariables = $matches->promotedPropertyParameterLocalUsages();
 ```
 
 These promoted-parameter local usages are computed on demand from the constructor AST and are not persisted in `MemberDependencyGraph` or in the cache.
+
+## Property Declaration Contexts
+
+`propertyDeclarationContext()` exposes the structural declaration context needed by type-changing callers:
+
+```php
+$context = $locator->propertyDeclarationContext(
+    owner: 'App\\Mailer',
+    propertyNames: ['transport', 'backupTransport'],
+);
+
+$items = $context->items();
+$diagnostics = $context->diagnostics();
+```
+
+Each context item exposes:
+
+- `file`: the `VirtualPhpSourceFile` containing the declaration;
+- `targetNode`: the targeted `PropertyProperty` or promoted-property `Param`;
+- `parentProperty`: the parent grouped `Property` statement, or `null` for promoted properties;
+- `parentClassLike`: the owning class-like statement;
+- `parentPropertyStatementIndex`: the parent property statement index in the class-like statement list;
+- `siblingProperties`: all `PropertyProperty` siblings in the same grouped declaration;
+- `promoted`: whether the target is a promoted property;
+- `phpDocOwner`: the direct PHPDoc owner when unambiguous;
+- `allSiblingsTargeted`: whether every sibling in the grouped declaration is part of the request.
+
+The API is additive and does not change `property()` lookup behavior.
+It emits diagnostics when a requested property cannot be located or when requested properties are split across different declarations.
 
 For trait-projected methods, method lookup follows the available-member family.
 If `App\\MailerTrait::send` is projected as `App\\Mailer::send`, consumer calls resolved to the projected method are returned as `MEMBER_USAGE`:

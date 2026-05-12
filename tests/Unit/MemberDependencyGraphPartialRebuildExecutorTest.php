@@ -158,7 +158,7 @@ final class MemberDependencyGraphPartialRebuildExecutorTest extends TestCase
             virtualFiles: $this->lastFullBuildVirtualFiles,
         );
         $fragmentsToReuse = new MemberGraphFragmentCollection();
-        $aFragment = $initialFragments->get($aFilePath);
+        $aFragment = $initialFragments->get($this->normalizePath($aFilePath));
 
         self::assertInstanceOf(MemberDependencyGraph::class, $aFragment);
         $fragmentsToReuse->add($aFilePath, $aFragment);
@@ -235,7 +235,7 @@ final class MemberDependencyGraphPartialRebuildExecutorTest extends TestCase
             virtualFiles: $this->lastFullBuildVirtualFiles,
         );
         $fragmentsToReuse = new MemberGraphFragmentCollection();
-        $aFragment = $initialFragments->get($aFilePath);
+        $aFragment = $initialFragments->get($this->normalizePath($aFilePath));
 
         self::assertInstanceOf(MemberDependencyGraph::class, $aFragment);
         $fragmentsToReuse->add($aFilePath, $aFragment);
@@ -383,6 +383,16 @@ final class MemberDependencyGraphPartialRebuildExecutorTest extends TestCase
             knownOwners: $fileRegistry->getKnownOwners(),
             virtualFiles: $this->lastFullBuildVirtualFiles,
         ));
+    }
+
+    /**
+     * Normalizes one filesystem path.
+     *
+     * @param string $path the path to normalize
+     */
+    private function normalizePath(string $path): string
+    {
+        return realpath($path) ?: $path;
     }
 
     /**

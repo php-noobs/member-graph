@@ -101,6 +101,7 @@ $matches = $locator->method('App\\Service\\UserService', 'send');
 $constantMatches = $locator->constant('App\\Config\\ENABLED');
 $parameterMatches = $locator->parameter('App\\Service\\UserService', 'send', 'message', 0);
 $parameterScope = $locator->parameterScope('App\\Service\\UserService', 'send', 'message', 0);
+$propertyContext = $locator->propertyDeclarationContext('App\\Service\\UserService', ['mailer', 'backupMailer']);
 $ownerMatches = $locator->owner('App\\Service\\UserService');
 ```
 
@@ -117,6 +118,7 @@ For trait source methods, consumer calls resolved through a consuming class are 
 Constant lookup returns namespace-level `const` items as `MEMBER_DECLARATION` and resolved constant fetches as `MEMBER_USAGE`.
 `use const` items are exposed by import scopes rather than by source-node usage lookup.
 Use `parameterScope()` when a caller needs neutral facts about the declaring scope: same-signature `Param` nodes, assigned local `Variable` nodes, and targeted parameter local usages.
+Use `propertyDeclarationContext()` when a caller needs neutral structural facts around grouped property declarations or promoted-property parameters.
 MemberGraph exposes those facts without deciding whether they are rename conflicts.
 
 ## Symbol Scopes
