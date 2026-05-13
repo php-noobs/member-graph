@@ -10,6 +10,9 @@ use PhpNoobs\MemberGraph\Application\Query\MemberGraphQueryService;
 use PhpNoobs\MemberGraph\Domain\Graph\MemberDependencyGraph;
 use PhpNoobs\MemberGraph\Domain\Graph\MemberId;
 use PhpNoobs\MemberGraph\Domain\Graph\MemberType;
+use PhpNoobs\MemberGraph\Domain\Owner\KnownOwner;
+use PhpNoobs\MemberGraph\Domain\Owner\KnownOwnerCollection;
+use PhpNoobs\MemberGraph\Infrastructure\PhpParser\Indexing\KnownOwnersCollectionBuilder;
 use PhpNoobs\PhpSource\VirtualPhpSourceFileCollection;
 
 /**
@@ -32,6 +35,10 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
             previousVirtualFiles: $previousBuild->virtualFiles,
             touchedVirtualFiles: $touchedVirtualFiles,
         );
+        $structurallyChangedOwnerFqcns = $this->structurallyChangedOwnerFqcns(
+            previousBuild: $previousBuild,
+            touchedVirtualFiles: $touchedVirtualFiles,
+        );
         $pendingTargets = [];
         $processedTargets = [];
 
@@ -43,6 +50,7 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
                 graph: $previousBuild->memberDependencyGraph,
                 physicalFilePath: $filePath,
                 virtualToPhysicalFilePaths: $virtualToPhysicalFilePaths,
+                structurallyChangedOwnerFqcns: $structurallyChangedOwnerFqcns,
             );
         }
 
@@ -52,6 +60,7 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
             pendingTargets: $pendingTargets,
             processedTargets: $processedTargets,
             virtualToPhysicalFilePaths: $virtualToPhysicalFilePaths,
+            structurallyChangedOwnerFqcns: $structurallyChangedOwnerFqcns,
         );
 
         return $workingSet->setIterations($iterations);
@@ -60,11 +69,12 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
     /**
      * Expands the working set with files impacted by touched declarations.
      *
-     * @param MemberDependencyGraphBuild           $previousBuild              the previous complete build
-     * @param MemberGraphInMemoryRefreshWorkingSet $workingSet                 the working set being expanded
-     * @param array<string, MemberImpactTarget>    $pendingTargets             the queued impact targets
-     * @param array<string, true>                  $processedTargets           the processed impact targets
-     * @param array<string, string>                $virtualToPhysicalFilePaths virtual-to-physical file path map
+     * @param MemberDependencyGraphBuild           $previousBuild                 the previous complete build
+     * @param MemberGraphInMemoryRefreshWorkingSet $workingSet                    the working set being expanded
+     * @param array<string, MemberImpactTarget>    $pendingTargets                the queued impact targets
+     * @param array<string, true>                  $processedTargets              the processed impact targets
+     * @param array<string, string>                $virtualToPhysicalFilePaths    virtual-to-physical file path map
+     * @param array<string, true>                  $structurallyChangedOwnerFqcns structurally changed owners indexed by FQCN
      */
     private function expandWithImpactedFiles(
         MemberDependencyGraphBuild $previousBuild,
@@ -72,6 +82,7 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
         array $pendingTargets,
         array $processedTargets,
         array $virtualToPhysicalFilePaths,
+        array $structurallyChangedOwnerFqcns,
     ): int {
         $iterations = 1;
         $query = MemberGraphQueryService::fromGraph($previousBuild->memberDependencyGraph);
@@ -101,6 +112,7 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
                         graph: $previousBuild->memberDependencyGraph,
                         physicalFilePath: $filePath,
                         virtualToPhysicalFilePaths: $virtualToPhysicalFilePaths,
+                        structurallyChangedOwnerFqcns: $structurallyChangedOwnerFqcns,
                     );
                 }
             }
@@ -118,9 +130,10 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
     /**
      * Returns impact targets declared in one physical file.
      *
-     * @param MemberDependencyGraph $graph                      the previous member graph
-     * @param string                $physicalFilePath           the physical file path
-     * @param array<string, string> $virtualToPhysicalFilePaths virtual-to-physical file path map
+     * @param MemberDependencyGraph $graph                         the previous member graph
+     * @param string                $physicalFilePath              the physical file path
+     * @param array<string, string> $virtualToPhysicalFilePaths    virtual-to-physical file path map
+     * @param array<string, true>   $structurallyChangedOwnerFqcns structurally changed owners indexed by FQCN
      *
      * @return array<string, MemberImpactTarget>
      */
@@ -128,11 +141,16 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
         MemberDependencyGraph $graph,
         string $physicalFilePath,
         array $virtualToPhysicalFilePaths,
+        array $structurallyChangedOwnerFqcns,
     ): array {
         $targets = [];
 
         foreach ($graph->ownerDeclarations->all() as $declaration) {
             if (!$this->belongsToPhysicalFile($declaration->file, $physicalFilePath, $virtualToPhysicalFilePaths)) {
+                continue;
+            }
+
+            if (!isset($structurallyChangedOwnerFqcns[$declaration->fqcn])) {
                 continue;
             }
 
@@ -155,6 +173,82 @@ final readonly class MemberGraphInMemoryRefreshWorkingSetResolver
         }
 
         return $targets;
+    }
+
+    /**
+     * Returns touched owners whose structural metadata changed.
+     *
+     * @param MemberDependencyGraphBuild     $previousBuild       the previous complete build
+     * @param VirtualPhpSourceFileCollection $touchedVirtualFiles the touched virtual files
+     *
+     * @return array<string, true>
+     */
+    private function structurallyChangedOwnerFqcns(
+        MemberDependencyGraphBuild $previousBuild,
+        VirtualPhpSourceFileCollection $touchedVirtualFiles,
+    ): array {
+        $touchedKnownOwners = $this->knownOwnersFromVirtualFiles($touchedVirtualFiles);
+        $changedOwnerFqcns = [];
+
+        foreach ($touchedKnownOwners as $knownOwner) {
+            $previousKnownOwner = $previousBuild->knownOwners->get($knownOwner->fqcn);
+
+            if ($this->ownerStructureChanged($previousKnownOwner, $knownOwner)) {
+                $changedOwnerFqcns[$knownOwner->fqcn] = true;
+            }
+        }
+
+        return $changedOwnerFqcns;
+    }
+
+    /**
+     * Builds known owners from the provided virtual files.
+     *
+     * @param VirtualPhpSourceFileCollection $virtualFiles the virtual files to inspect
+     */
+    private function knownOwnersFromVirtualFiles(VirtualPhpSourceFileCollection $virtualFiles): KnownOwnerCollection
+    {
+        $knownOwners = new KnownOwnerCollection();
+        $builder = new KnownOwnersCollectionBuilder();
+
+        foreach ($virtualFiles as $virtualFile) {
+            $builder->build($virtualFile->nodes, $knownOwners);
+        }
+
+        return $knownOwners;
+    }
+
+    /**
+     * Indicates whether owner structural metadata changed.
+     *
+     * @param KnownOwner|null $previousKnownOwner the previous owner metadata
+     * @param KnownOwner      $currentKnownOwner  the current owner metadata
+     */
+    private function ownerStructureChanged(?KnownOwner $previousKnownOwner, KnownOwner $currentKnownOwner): bool
+    {
+        if (null === $previousKnownOwner) {
+            return true;
+        }
+
+        return $previousKnownOwner->parentFqcn !== $currentKnownOwner->parentFqcn
+            || $previousKnownOwner->kind !== $currentKnownOwner->kind
+            || $this->sortedValues($previousKnownOwner->interfaces) !== $this->sortedValues($currentKnownOwner->interfaces)
+            || $this->sortedValues($previousKnownOwner->extendsInterfaces) !== $this->sortedValues($currentKnownOwner->extendsInterfaces)
+            || $this->sortedValues($previousKnownOwner->traits) !== $this->sortedValues($currentKnownOwner->traits);
+    }
+
+    /**
+     * Returns sorted scalar values.
+     *
+     * @param list<string> $values the values to sort
+     *
+     * @return list<string>
+     */
+    private function sortedValues(array $values): array
+    {
+        sort($values);
+
+        return $values;
     }
 
     /**

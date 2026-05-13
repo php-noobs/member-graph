@@ -56,6 +56,10 @@ final readonly class MemberGraphInMemoryRefreshExecutor
         MemberGraphInMemoryRefreshWorkingSet $workingSet,
         MemberGraphIssueCollection $dependencyGraphIssues,
     ): ?MemberDependencyGraphBuild {
+        if (count($previousBuild->virtualFiles) !== count($previousBuild->virtualFileReferences)) {
+            return null;
+        }
+
         $virtualFilesToRebuild = $this->virtualFilesForPhysicalFiles(
             virtualFiles: $mergedVirtualFiles,
             physicalFilePaths: $workingSet->filesToRebuildGraph,

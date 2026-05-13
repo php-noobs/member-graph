@@ -136,7 +136,7 @@ final class MemberGraphInMemoryRefreshWorkingSetResolverTest extends MemberDepen
         self::assertTrue($workingSet->hasFileToRebuildGraph(realpath($aFilePath) ?: $aFilePath));
         self::assertTrue($workingSet->hasFileToRebuildGraph(realpath($bFilePath) ?: $bFilePath));
         self::assertTrue($workingSet->hasFileToRebuildGraph(realpath($cFilePath) ?: $cFilePath));
-        self::assertSame(2, $workingSet->iterations);
+        self::assertSame(3, $workingSet->iterations);
         self::assertCount(3, $workingSet->filesToRebuildGraph);
     }
 

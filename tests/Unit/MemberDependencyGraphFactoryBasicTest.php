@@ -425,6 +425,131 @@ final class MemberDependencyGraphFactoryBasicTest extends MemberDependencyGraphF
     }
 
     /**
+     * Ensures in-memory partial refresh does not expand owner usages when owner structure is unchanged.
+     */
+    public function testItDoesNotExpandOwnerUsagesWhenTouchedOwnerStructureIsUnchanged(): void
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $aFilePath = $srcDirectory.'/A.php';
+        $bFilePath = $srcDirectory.'/B.php';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+
+        mkdir($srcDirectory, 0o777, true);
+        file_put_contents($aFilePath, <<<'PHP'
+            <?php
+
+            namespace App;
+
+            final class A
+            {
+                public function run(B $b): void
+                {
+                }
+            }
+            PHP);
+        file_put_contents($bFilePath, <<<'PHP'
+            <?php
+
+            namespace App;
+
+            final class B
+            {
+                public function changed(): void
+                {
+                }
+            }
+            PHP);
+
+        $initialBuild = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+        $touchedVirtualFile = self::virtualFileForPhysicalFile($initialBuild, $bFilePath);
+        $method = self::firstClassMethod(self::firstClass($touchedVirtualFile->nodes));
+        $method->name = new Identifier('next');
+
+        $refreshedBuild = MemberDependencyGraphFactory::refreshFromTouchedVirtualFiles(
+            previousBuild: $initialBuild,
+            touchedVirtualFiles: new VirtualPhpSourceFileCollection()->add($touchedVirtualFile),
+        );
+        $fullBuild = MemberDependencyGraphFactory::fromVirtualFiles($refreshedBuild->virtualFiles);
+
+        self::assertSame(
+            MemberDependencyGraphFactoryBuildMode::IN_MEMORY_PARTIAL_REFRESH,
+            $refreshedBuild->buildReport->buildMode,
+        );
+        self::assertNotNull($refreshedBuild->buildReport->inMemoryRefreshWorkingSet);
+        self::assertFalse($refreshedBuild->buildReport->inMemoryRefreshWorkingSet->hasFileToRebuildGraph(
+            realpath($aFilePath) ?: $aFilePath,
+        ));
+        self::assertTrue($refreshedBuild->buildReport->inMemoryRefreshWorkingSet->hasFileToRebuildGraph(
+            realpath($bFilePath) ?: $bFilePath,
+        ));
+        self::assertSame(1, $refreshedBuild->buildReport->loadedVirtualFileCount);
+        self::assertSame(
+            $this->declarationHashes($fullBuild->memberDependencyGraph),
+            $this->declarationHashes($refreshedBuild->memberDependencyGraph),
+        );
+        self::assertSame(
+            $this->usageSignatures($fullBuild->memberDependencyGraph),
+            $this->usageSignatures($refreshedBuild->memberDependencyGraph),
+        );
+    }
+
+    /**
+     * Ensures refresh falls back to a full in-memory build when the previous build has no virtual files.
+     */
+    public function testItFallsBackToFullInMemoryRefreshWhenPreviousBuildHasNoVirtualFiles(): void
+    {
+        $srcDirectory = $this->workspace.'/src';
+        $filePath = $srcDirectory.'/Mailer.php';
+        $cacheFilePath = $this->workspace.'/member-graph.cache';
+
+        mkdir($srcDirectory, 0o777, true);
+        file_put_contents($filePath, <<<'PHP'
+            <?php
+
+            namespace App;
+
+            final class Mailer
+            {
+                public function send(): void
+                {
+                }
+            }
+            PHP);
+
+        $initialBuild = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+        $fastPathBuild = MemberDependencyGraphFactory::fromDirectory(
+            directories: [$srcDirectory],
+            cacheFilePath: $cacheFilePath,
+        );
+
+        self::assertTrue($fastPathBuild->usedFastPath());
+        self::assertCount(0, $fastPathBuild->virtualFiles);
+
+        $refreshedBuild = MemberDependencyGraphFactory::refreshFromTouchedVirtualFiles(
+            previousBuild: $fastPathBuild,
+            touchedVirtualFiles: $initialBuild->virtualFiles,
+        );
+
+        self::assertSame(
+            MemberDependencyGraphFactoryBuildMode::IN_MEMORY_FULL_FALLBACK,
+            $refreshedBuild->buildReport->buildMode,
+        );
+        self::assertTrue($refreshedBuild->usedFullBuild());
+        self::assertTrue($refreshedBuild->usedInMemoryFullFallback());
+        self::assertFalse($refreshedBuild->usedInMemoryPartialRefresh());
+        self::assertSame(1, $refreshedBuild->buildReport->loadedVirtualFileCount);
+        self::assertNotNull($refreshedBuild->memberDependencyGraph->declarations->get(
+            new MemberId('App\\Mailer', 'send', MemberType::METHOD),
+        ));
+    }
+
+    /**
      * Ensures in-memory partial refresh recomputes global facts from the merged source view.
      */
     public function testItRefreshesGlobalFactsFromTouchedVirtualFiles(): void
